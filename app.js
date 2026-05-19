@@ -388,3 +388,29 @@ async function handleUpdatePassword() {
         if (btn) { btn.disabled = false; btn.innerHTML = '<span class="btn-text"><i class="fa-solid fa-key"></i> SIMPAN PASSWORD BARU</span>'; }
     }
 }
+
+function initTradingView(symbol = "FX:EURUSD") {
+    const container = document.getElementById('tradingview-container');
+    if (!container) return;
+
+    // 1. Bersihkan isi container
+    container.innerHTML = ''; 
+
+    // 2. Buat elemen iframe secara dinamis
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+    
+    // TRIK RAHASIA: Sembunyikan asal domain Vercel agar tidak diblokir
+    iframe.referrerPolicy = 'no-referrer'; 
+    
+    // Bersihkan format simbol
+    const cleanSymbol = symbol.replace(/\s+/g, ''); 
+
+    // 3. Masukkan URL embed langsung
+    iframe.src = `https://s.tradingview.com/widgetembed/?symbol=${cleanSymbol}&theme=dark&style=1&locale=en&toolbarbg=060913&withdateranges=true&hideideas=true`;
+    
+    // 4. Masukkan iframe ke dalam container
+    container.appendChild(iframe);
+}
