@@ -1,210 +1,89 @@
-// ============================================
-// PEN SYNERGY AI - app.js
-// Supabase-only: Config + Auth + Dashboard
-// ============================================
-'use strict';
+// ================================================================
+// APP.JS — PEN SYNERGY AI Trading Terminal (Frontend)
+// ================================================================
 
-// ── SUPABASE CONFIG ─────────────────────────
-const SUPABASE_URL = 'https://oozkexigsiayejgxvvpz.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_COkDK-0udZnlCnvZtcimGw_L06UlXX9';
+// ── CONFIG ──
+// GANTI AI DI SINI SAJA ('openai', 'gemini', atau 'claude')
+const CONFIG = {
+    AI_PROVIDER: 'claude', 
+    STORAGE_BUCKET: 'screenshots',
+    TICKER_INTERVAL: 4000,
+};
 
-// ── GLOBAL STATE ────────────────────────────
-let supabaseClient = null;
-let currentUser = null;
+// ── GLOBAL STATE ──
+let currentUser      = null;
+let tvWidget         = null;
+let currentPair      = 'FX:EURUSD';
+let currentPairLabel = 'EUR/USD';
+let uploadedFile     = null;
+let uploadedFileB64  = null;
+let tickerInterval   = null;
+let lastAnalysis     = null;
 
-// ── DOM ELEMENTS ────────────────────────────
+// ── DOM REFS ──
 const globalLoader = document.getElementById('global-loader');
-const authOverlay = document.getElementById('auth-overlay');
-const workspace = document.getElementById('workspace');
+const authOverlay  = document.getElementById('auth-overlay');
+const workspace    = document.getElementById('workspace');
 
-// ── INITIALIZATION ──────────────────────────
-function initSupabase() {
-    if (typeof window.supabase === 'undefined') {
-        console.error('[ERROR] Supabase CDN not loaded!');
-        showError('Supabase CDN tidak terdeteksi. Periksa koneksi internet Anda.');
-        return false;
-    }
+// ================================================================
+// UI STATE TRANSITIONS
+// ================================================================
 
-    try {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-            auth: {
-                persistSession: true,
-                autoRefreshToken: true,
-                detectSessionInUrl: true
-            }
-        });
-        console.log('[OK] Supabase client initialized');
-        return true;
-    } catch (err) {
-        console.error('[ERROR] Supabase init failed:', err.message);
-        showError('Gagal inisialisasi Supabase. Periksa URL dan ANON KEY.');
-        return false;
-    }
-}
-
-function showError(message) {
-    if (globalLoader) {
-        globalLoader.innerHTML = `
-            <div style="text-align:center;color:#ef4444;padding:40px">
-                <i class="fa-solid fa-triangle-exclamation" style="font-size:3rem"></i>
-                <p style="margin-top:16px;font-family:monospace">${message}</p>
-            </div>`;
-        globalLoader.classList.remove('hidden');
-    }
-}
-
-// ── HIDE LOADER ─────────────────────────────
 function hideLoader() {
     if (!globalLoader) return;
     globalLoader.classList.add('fade-out');
-    setTimeout(() => {
-        globalLoader.classList.add('hidden');
-        globalLoader.classList.remove('fade-out');
-    }, 500);
+    setTimeout(() => globalLoader.classList.add('hidden'), 500);
 }
 
-// ── UI TRANSITIONS ──────────────────────────
 function showAuthUI() {
-    if (authOverlay) authOverlay.classList.remove('hidden');
-    if (workspace) workspace.classList.add('hidden');
+    authOverlay?.classList.remove('hidden');
+    workspace?.classList.add('hidden');
+    stopTicker();
 }
 
 function showDashboard(user) {
-    if (authOverlay) authOverlay.classList.add('hidden');
-    if (workspace) workspace.classList.remove('hidden');
-    
-    startLiveClock();
-    initTradingView();
+    authOverlay?.classList.add('hidden');
+    workspace?.classList.remove('hidden');
 
     const emailEl = document.getElementById('topbar-email');
-    if (emailEl && user) {
-        emailEl.textContent = user.email || 'User';
-    }
+    if (emailEl && user) emailEl.textContent = user.email || 'User';
+
+    startLiveClock();
+    initTradingView(currentPair);
+    initTicker();
+    loadAnalysisHistory();
+    setMobileActivePanel('chart'); 
 }
 
-// ── AUTH LISTENER ───────────────────────────
-function setupAuthListener() {
-    if (!supabaseClient) return;
+function showResetPasswordUI() {
+    authOverlay?.classList.remove('hidden');
+    workspace?.classList.add('hidden');
 
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-        console.log('[AUTH] Event:', event, session ? 'User logged in' : 'No session');
-        
-        // SELALU sembunyikan loader setelah auth state terdeteksi
-        hideLoader();
-        // 1. JIKA USER DATANG DARI LINK EMAIL LUPA PASSWORD
-        if (event === 'PASSWORD_RECOVERY') {
-            console.log('[AUTH] Mengalihkan ke panel reset password...');
-            showResetPasswordUI();
-        } 
-        // 2. JIKA USER BERHASIL LOGIN BIASA
-        else if (session && session.user) {
-            currentUser = session.user;
-            showDashboard(session.user);
-        } 
-        // 3. JIKA TIDAK ADA SESI
-        else 
+    const tabs = document.querySelector('.auth-tabs');
+    if (tabs) tabs.style.display = 'none';
 
-        if (session && session.user) {
-            currentUser = session.user;
-            showDashboard(session.user);
-        } else {
-            currentUser = null;
-            showAuthUI();
-        }
-    });
+    document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-reset')?.classList.add('active');
 }
 
-// ── AUTH FUNCTIONS ──────────────────────────
-async function handleLogin() {
-    const email = document.getElementById('login-email')?.value?.trim();
-    const password = document.getElementById('login-password')?.value;
-
-    if (!email || !password) {
-        showToast('warning', 'fa-triangle-exclamation', 'Isi email dan password!');
-        return;
-    }
-
-    const btn = document.getElementById('btn-login');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> LOADING...'; }
-
-    try {
-        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        showToast('success', 'fa-circle-check', 'Login berhasil!');
-    } catch (err) {
-        console.error('[AUTH] Login error:', err);
-        showToast('error', 'fa-circle-xmark', err.message || 'Login gagal');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-bolt"></i> ACCESS TERMINAL'; }
-    }
-}
-
-async function handleRegister() {
-    const email = document.getElementById('register-email')?.value?.trim();
-    const password = document.getElementById('register-password')?.value;
-    const confirm = document.getElementById('register-confirm')?.value;
-
-    if (!email || !password) {
-        showToast('warning', 'fa-triangle-exclamation', 'Isi email dan password!');
-        return;
-    }
-    if (password !== confirm) {
-        showToast('warning', 'fa-triangle-exclamation', 'Password tidak cocok!');
-        return;
-    }
-    if (password.length < 8) {
-        showToast('warning', 'fa-triangle-exclamation', 'Password minimal 8 karakter!');
-        return;
-    }
-
-    const btn = document.getElementById('btn-register');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> CREATING...'; }
-
-    try {
-        const { error } = await supabaseClient.auth.signUp({ email, password });
-        if (error) throw error;
-        showToast('success', 'fa-circle-check', 'Registrasi berhasil! Cek email Anda.');
-        switchAuthTab('login');
-    } catch (err) {
-        console.error('[AUTH] Register error:', err);
-        showToast('error', 'fa-circle-xmark', err.message || 'Registrasi gagal');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-key"></i> CREATE ACCOUNT'; }
-    }
-}
-
-async function handleSignOut() {
-    try {
-        await supabaseClient.auth.signOut();
-        showToast('info', 'fa-right-from-bracket', 'Logout berhasil');
-    } catch (err) {
-        console.error('[AUTH] SignOut error:', err);
-    }
-}
-
-// ── TAB SWITCHER ────────────────────────────
 function switchAuthTab(tab) {
-    document.querySelectorAll('.auth-tab').forEach(t => {
-        t.classList.toggle('active', t.id === `tab-${tab}`);
-    });
-    document.querySelectorAll('.auth-panel').forEach(p => {
-        p.classList.toggle('active', p.id === `panel-${tab}`);
-    });
+    document.querySelectorAll('.auth-tab').forEach(t =>
+        t.classList.toggle('active', t.id === `tab-${tab}`)
+    );
+    document.querySelectorAll('.auth-panel').forEach(p =>
+        p.classList.toggle('active', p.id === `panel-${tab}`)
+    );
 }
 
-// ── PASSWORD TOGGLE ─────────────────────────
 function togglePasswordVisibility(inputId, btn) {
     const input = document.getElementById(inputId);
     if (!input) return;
     const isHidden = input.type === 'password';
     input.type = isHidden ? 'text' : 'password';
     const icon = btn.querySelector('i');
-    if (icon) {
-        icon.className = isHidden ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
-    }
+    if (icon) icon.className = isHidden ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
 }
 
-// ── TOAST SYSTEM ────────────────────────────
 function showToast(type, iconClass, message, duration = 4000) {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -226,191 +105,627 @@ function showToast(type, iconClass, message, duration = 4000) {
     });
 }
 
-// ── BOOTSTRAP ───────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('[APP] DOM loaded, initializing...');
-
-    // 1. Inisialisasi Supabase
-    if (!initSupabase()) {
-        // Supabase gagal - loader sudah menampilkan error
-        return;
-    }
-
-    // 2. Setup auth listener (ini akan menyembunyikan loader)
-    setupAuthListener();
-
-    // 3. Fallback: kalau dalam 3 detik loader belum hilang, sembunyikan paksa
-    setTimeout(() => {
-        if (globalLoader && !globalLoader.classList.contains('hidden')) {
-            console.warn('[APP] Force hiding loader after timeout');
-            hideLoader();
-            showAuthUI();
-        }
-    }, 3000);
-});
-
-console.log('[APP] app.js loaded');
-
-// Kita tambahkan variabel global untuk menyimpan referensi widget saat ini
-let currentTVWidget = null;
-
-function initTradingView(symbol = "FX:EURUSD") {
-    const container = document.getElementById('tradingview-container');
-    if (!container) return;
-
-    // 1. Bersihkan isi container secara fisik
-    container.innerHTML = ''; 
-
-    // 2. Jika widget lama masih aktif, kita hapus (opsional jika library mendukung)
-    // Tapi karena kita menggunakan CDN, cara paling aman adalah membuang elemen di dalamnya
-    
-    // 3. Tambahkan sedikit jeda agar browser sempat merender ulang
-    setTimeout(() => {
-        new TradingView.widget({
-            "container_id": "tradingview-container",
-            "symbol": symbol,
-            "autosize": true,
-            "theme": "dark",
-            "style": "1",
-            "locale": "en",
-            "toolbar_bg": "#060913",
-            "enable_publishing": false,
-            "allow_symbol_change": true, // Biarkan user ganti pair dari dalam widget juga
-            "details": true
-        });
-    }, 10); // Jeda 100ms sudah cukup untuk menghilangkan sisa grafik lama
-}
-
+// ================================================================
+// LIVE CLOCK & TRADINGVIEW
+// ================================================================
 function startLiveClock() {
     const clockEl = document.getElementById('clock-display');
     if (!clockEl) return;
-    setInterval(() => {
+
+    const update = () => {
         const now = new Date();
-        clockEl.textContent = now.toUTCString().split(' ')[4] + ' UTC';
-    }, 1000);
+        const hh  = String(now.getUTCHours()).padStart(2, '0');
+        const mm  = String(now.getUTCMinutes()).padStart(2, '0');
+        const ss  = String(now.getUTCSeconds()).padStart(2, '0');
+        clockEl.textContent = `${hh}:${mm}:${ss} UTC`;
+    };
+
+    update();
+    setInterval(update, 1000);
 }
 
-// ── FUNGSI UNTUK MENGGANTI PAIR (PENTING!) ──
-function changeTradingPair(symbol) {
-    console.log('[UI] Mengganti pair ke:', symbol);
-    // Fungsi ini akan menghapus grafik lama dan memuat grafik baru
-    initTradingView(symbol);
-}
-
-// ── FUNGSI LUPA PASSWORD ────────────────────
-async function handleForgotPassword() {
-    const email = document.getElementById('login-email')?.value?.trim();
-
-    // Validasi apakah user sudah ketik email di kolom login
-    if (!email) {
-        showToast('warning', 'fa-triangle-exclamation', 'Ketik email kamu dulu di kolom EMAIL ADDRESS!');
-        return;
-    }
-
-    try {
-        // Mengirimkan email reset password dari Supabase
-        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin, // Akan mengarahkan kembali ke web saat diklik
-        });
-        
-        if (error) throw error;
-        showToast('success', 'fa-circle-check', 'Link reset password dikirim! Silakan cek email kamu.');
-    } catch (err) {
-        console.error('[AUTH] Reset error:', err);
-        showToast('error', 'fa-circle-xmark', err.message || 'Gagal mengirim email reset');
-    }
-}
-
-async function handleForgotPassword() {
-    const email = document.getElementById('login-email')?.value?.trim();
-
-    if (!email) {
-        showToast('warning', 'fa-triangle-exclamation', 'Masukkan email Anda di kolom atas!');
-        return;
-    }
-
-    try {
-        // Ini perintah ke Supabase untuk mengirim email reset
-        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/index.html', 
-        });
-        
-        if (error) throw error;
-        showToast('success', 'fa-paper-plane', 'Email reset password telah dikirim!');
-    } catch (err) {
-        showToast('error', 'fa-circle-xmark', 'Gagal: ' + err.message);
-    }
-}
-
-// Fungsi untuk memunculkan form password baru & menyembunyikan menu login/register
-function showResetPasswordUI() {
-    if (authOverlay) authOverlay.classList.remove('hidden');
-    if (workspace) workspace.classList.add('hidden');
-    
-    // Sembunyikan tab penanda SIGN IN / REGISTER di atas agar tidak membingungkan
-    const tabs = document.querySelector('.auth-tabs');
-    if (tabs) tabs.style.display = 'none'; 
-    
-    // Aktifkan panel reset password
-    document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
-    const resetPanel = document.getElementById('panel-reset');
-    if (resetPanel) resetPanel.classList.add('active');
-}
-
-// Fungsi eksekusi ganti password ke server Supabase
-async function handleUpdatePassword() {
-    const newPassword = document.getElementById('reset-password')?.value;
-
-    if (!newPassword || newPassword.length < 8) {
-        showToast('warning', 'fa-triangle-exclamation', 'Password baru minimal 8 karakter!');
-        return;
-    }
-
-    const btn = document.getElementById('btn-update-password');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> UPDATING...'; }
-
-    try {
-        // Mengirim password baru ke akun user yang sedang aktif lewat token email
-        const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
-        if (error) throw error;
-        
-        showToast('success', 'fa-circle-check', 'Password berhasil diganti! Memuat ulang halaman...');
-        
-        // Bersihkan token di URL dan balikkan ke halaman login utama setelah 2 detik
-        setTimeout(() => {
-            window.location.hash = ''; 
-            window.location.reload(); 
-        }, 2500);
-
-    } catch (err) {
-        console.error('[AUTH] Gagal update password:', err);
-        showToast('error', 'fa-circle-xmark', err.message || 'Gagal memperbarui password');
-        if (btn) { btn.disabled = false; btn.innerHTML = '<span class="btn-text"><i class="fa-solid fa-key"></i> SIMPAN PASSWORD BARU</span>'; }
-    }
-}
-
-function initTradingView(symbol = "FX:EURUSD") {
+function initTradingView(symbol = 'FX:EURUSD') {
     const container = document.getElementById('tradingview-container');
     if (!container) return;
 
-    // 1. Bersihkan isi container
-    container.innerHTML = ''; 
+    container.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'tradingview-widget-container';
+    div.style.cssText = 'width:100%;height:100%;';
 
-    // 2. Buat elemen iframe secara dinamis
-    const iframe = document.createElement('iframe');
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = 'none';
-    
-    // TRIK RAHASIA: Sembunyikan asal domain Vercel agar tidak diblokir
-    iframe.referrerPolicy = 'no-referrer'; 
-    
-    // Bersihkan format simbol
-    const cleanSymbol = symbol.replace(/\s+/g, ''); 
+    const script = document.createElement('script');
+    script.type  = 'text/javascript';
+    script.src   = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    script.async = true;
+    script.text  = JSON.stringify({
+        autosize:           true,
+        symbol:             symbol.replace(/\s+/g, ''),
+        interval:           'D',
+        timezone:           'Etc/UTC',
+        theme:              'dark',
+        style:              '1',
+        locale:             'en',
+        enable_publishing:  false,
+        allow_symbol_change: true,
+        calendar:           false,
+        hide_top_toolbar:   false,
+        hide_legend:        false,
+        save_image:         false,
+        support_host:       'https://www.tradingview.com',
+    });
 
-    // 3. Masukkan URL embed langsung
-    iframe.src = `https://s.tradingview.com/widgetembed/?symbol=${cleanSymbol}&theme=dark&style=1&locale=en&toolbarbg=060913&withdateranges=true&hideideas=true`;
+    div.appendChild(script);
+    container.appendChild(div);
+}
+
+function changeTradingPair(symbol) {
+    currentPair = symbol;
+    const sel = document.getElementById('pair-select');
+    if (sel) {
+        const opt = sel.options[sel.selectedIndex];
+        currentPairLabel = opt ? opt.text : symbol;
+    }
+    initTradingView(symbol);
+    showToast('info', 'fa-chart-candlestick', `Pair diubah ke ${currentPairLabel}`);
+}
+
+// ================================================================
+// LIVE MARKET TICKER
+// ================================================================
+const TICKER_PAIRS = [
+    { label: 'EUR/USD',  base: 1.1850, pip: 0.0001, digits: 5 },
+    { label: 'GBP/USD',  base: 1.2720, pip: 0.0001, digits: 5 },
+    { label: 'USD/JPY',  base: 149.80, pip: 0.01,   digits: 3 },
+    { label: 'XAU/USD',  base: 3320.0, pip: 0.1,    digits: 2 },
+    { label: 'BTC/USDT', base: 69500,  pip: 1,      digits: 0 },
+    { label: 'ETH/USDT', base: 3750,   pip: 0.1,    digits: 2 },
+];
+
+let tickerState = TICKER_PAIRS.map(p => ({
+    ...p,
+    price:  p.base,
+    change: 0,
+    pct:    0,
+    high:   p.base * 1.003,
+    low:    p.base * 0.997,
+    volume: Math.floor(Math.random() * 90000) + 10000,
+}));
+
+function initTicker() {
+    renderTickerSkeletons();
+    updateTickerValues();
+    tickerInterval = setInterval(updateTickerValues, CONFIG.TICKER_INTERVAL);
+}
+
+function stopTicker() {
+    if (tickerInterval) { clearInterval(tickerInterval); tickerInterval = null; }
+}
+
+function renderTickerSkeletons() {
+    const grid = document.getElementById('ticker-grid');
+    if (!grid) return;
+    grid.innerHTML = tickerState.map(() => `
+        <div class="ticker-card">
+            <div class="tick-label skeleton" style="width:60px;height:10px;"></div>
+            <div class="tick-value skeleton" style="width:90px;height:20px;margin:4px 0;"></div>
+            <div class="tick-sub skeleton" style="width:70px;height:10px;"></div>
+        </div>
+    `).join('');
+}
+
+function updateTickerValues() {
+    const grid = document.getElementById('ticker-grid');
+    if (!grid) return;
+
+    tickerState = tickerState.map(t => {
+        const drift    = (Math.random() - 0.49) * t.pip * 3;
+        const newPrice = Math.max(t.base * 0.97, Math.min(t.base * 1.03, t.price + drift));
+        const change   = newPrice - t.base;
+        const pct      = (change / t.base) * 100;
+        const newHigh  = Math.max(t.high, newPrice);
+        const newLow   = Math.min(t.low, newPrice);
+        const volDrift = Math.floor((Math.random() - 0.5) * 500);
+
+        return { ...t, price: newPrice, change, pct, high: newHigh, low: newLow, volume: Math.max(1000, t.volume + volDrift) };
+    });
+
+    grid.innerHTML = tickerState.map(t => {
+        const dir     = t.change >= 0 ? 'up' : 'down';
+        const arrow   = t.change >= 0 ? '▲' : '▼';
+        const pctStr  = (t.pct >= 0 ? '+' : '') + t.pct.toFixed(2) + '%';
+        const priceStr = t.price.toFixed(t.digits);
+        const volStr  = t.volume >= 1000 ? (t.volume / 1000).toFixed(1) + 'K' : t.volume;
+
+        return `
+            <div class="ticker-card">
+                <div class="tick-label">${t.label}</div>
+                <div class="tick-value ${dir}">${priceStr}</div>
+                <div class="tick-sub">${arrow} ${pctStr} &nbsp;|&nbsp; Vol: ${volStr}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ================================================================
+// SCREENSHOT UPLOAD 
+// ================================================================
+function handleDragOver(e) {
+    e.preventDefault();
+    document.getElementById('dropzone')?.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+    e.preventDefault();
+    document.getElementById('dropzone')?.classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropzone')?.classList.remove('drag-over');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) processImageFile(file);
+}
+
+function handleFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (file) processImageFile(file);
+}
+
+function processImageFile(file) {
+    if (!file.type.startsWith('image/')) {
+        showToast('error', 'fa-circle-xmark', 'File harus berupa gambar (PNG/JPG/WEBP)!');
+        return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+        showToast('error', 'fa-circle-xmark', 'Ukuran file max 10MB!');
+        return;
+    }
+
+    uploadedFile = file;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const result = e.target.result;
+        uploadedFileB64 = result.split(',')[1]; 
+
+        const placeholder = document.getElementById('dropzone-placeholder');
+        const preview     = document.getElementById('dropzone-preview');
+        const img         = document.getElementById('preview-img');
+        const badge       = document.getElementById('upload-status');
+
+        if (img)         img.src = result;
+        if (placeholder) placeholder.classList.add('hidden');
+        if (preview)     preview.classList.remove('hidden');
+        if (badge)       badge.classList.remove('hidden');
+
+        showToast('success', 'fa-circle-check', `Screenshot siap: ${file.name}`);
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearUploadedImage(e) {
+    if (e) e.stopPropagation();
+
+    uploadedFile    = null;
+    uploadedFileB64 = null;
+
+    const placeholder = document.getElementById('dropzone-placeholder');
+    const preview     = document.getElementById('dropzone-preview');
+    const badge       = document.getElementById('upload-status');
+    const fileInput   = document.getElementById('file-input');
+    const img         = document.getElementById('preview-img');
+
+    if (img)         img.src = '';
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (preview)     preview.classList.add('hidden');
+    if (badge)       badge.classList.add('hidden');
+    if (fileInput)   fileInput.value = '';
+}
+
+async function uploadScreenshotToSupabase(file) {
+    if (!supabaseClient || !currentUser) return null;
+
+    const ext      = file.name.split('.').pop() || 'png';
+    const fileName = `${currentUser.id}/${Date.now()}.${ext}`;
+
+    try {
+        const { data, error } = await supabaseClient.storage
+            .from(CONFIG.STORAGE_BUCKET)
+            .upload(fileName, file, { contentType: file.type, upsert: false });
+
+        if (error) throw error;
+        const { data: urlData } = supabaseClient.storage.from(CONFIG.STORAGE_BUCKET).getPublicUrl(fileName);
+        return urlData?.publicUrl || null;
+
+    } catch (err) {
+        console.error('[STORAGE] Upload error:', err.message);
+        showToast('warning', 'fa-triangle-exclamation', 'Gagal upload screenshot ke cloud.');
+        return null;
+    }
+}
+
+// ================================================================
+// AI ANALYSIS — KOMUNIKASI DENGAN BACKEND VERCEL
+// ================================================================
+async function runAIAnalysis() {
+    if (!currentUser) {
+        showToast('warning', 'fa-triangle-exclamation', 'Login dulu untuk menjalankan analisis!');
+        return;
+    }
+
+    setAnalysisButtonsState(true);
+    document.getElementById('ai-section')?.classList.add('analyzing');
+    showToast('info', 'fa-microchip', `Memanggil AI (${CONFIG.AI_PROVIDER.toUpperCase()}) dari server...`);
+
+    try {
+        let screenshotUrl = null;
+        if (uploadedFile) {
+            showToast('info', 'fa-cloud-arrow-up', 'Mengupload screenshot chart...');
+            screenshotUrl = await uploadScreenshotToSupabase(uploadedFile);
+        }
+
+        // --- PANGGIL BACKEND ---
+        const aiResult = await callAIAPI(currentPairLabel, uploadedFileB64);
+
+        if (!aiResult || !aiResult.signal) throw new Error('Format balasan AI tidak valid');
+
+        updateUIWithAnalysis(aiResult);
+        await saveAnalysisToSupabase(aiResult, screenshotUrl);
+        await loadAnalysisHistory();
+
+        if (uploadedFileB64 && aiResult.visionAnalysis) {
+            showVisionResult(aiResult.visionAnalysis);
+        }
+
+        showToast('success', 'fa-circle-check', `Analisis ${currentPairLabel} selesai!`, 5000);
+        lastAnalysis = aiResult;
+
+    } catch (err) {
+        console.error('[FRONTEND] Analysis error:', err);
+        showToast('error', 'fa-circle-xmark', 'Analisis gagal: ' + (err.message || 'Unknown error'));
+    } finally {
+        setAnalysisButtonsState(false);
+        document.getElementById('ai-section')?.classList.remove('analyzing');
+    }
+}
+
+// Fungsi paling krusial: Nembak ke Vercel Serverless Function
+async function callAIAPI(pair, imageBase64 = null) {
+    const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            provider: CONFIG.AI_PROVIDER.toLowerCase(), // Ngirim provider (openai/gemini/claude)
+            pair: pair, 
+            imageBase64: imageBase64 
+        })
+    });
+
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Server error');
+    }
+
+    return await response.json(); // Hasil akhirnya otomatis dikembalikan
+}
+
+function setAnalysisButtonsState(loading) {
+    const btns = [
+        document.getElementById('btn-run-analysis'),
+        document.getElementById('btn-scan-analyze'),
+    ];
+    btns.forEach(btn => {
+        if (!btn) return;
+        btn.disabled = loading;
+        const icon = btn.querySelector('i');
+        if (icon) icon.className = loading ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-microchip';
+    });
+}
+
+// ================================================================
+// UPDATE UI
+// ================================================================
+function updateUIWithAnalysis(data) {
+    updateSignalBadge(data);
+    updateConfidence(data.confidence);
+    updateMomentumGrid(data);
+    updatePOILevels(data);
+    updateSMCOutput(data.analysis);
+    updateMTFMatrix(data.mtf);
+    updateIndicators(data.indicators);
+}
+
+function updateSignalBadge(data) {
+    const badge = document.getElementById('signal-badge');
+    if (!badge) return;
+
+    const signalMap = {
+        'STRONG_BUY':  { cls: 'strong-buy', icon: 'fa-rocket',         label: 'STRONG BUY' },
+        'BUY':         { cls: 'buy',        icon: 'fa-arrow-trend-up', label: 'BUY' },
+        'WAIT':        { cls: 'wait',       icon: 'fa-hourglass-half', label: 'WAIT / NEUTRAL' },
+        'SELL':        { cls: 'sell',       icon: 'fa-arrow-trend-down', label: 'SELL' },
+        'STRONG_SELL': { cls: 'strong-sell', icon: 'fa-skull-crossbones', label: 'STRONG SELL' },
+    };
+
+    const sig = signalMap[data.signal?.toUpperCase()] || signalMap['WAIT'];
+    badge.className = `signal-badge ${sig.cls}`;
+    badge.innerHTML = `<i class="fa-solid ${sig.icon}"></i><span>${sig.label}</span>`;
+}
+
+function updateConfidence(pct) {
+    const bar   = document.getElementById('confidence-bar');
+    const label = document.getElementById('confidence-pct');
+    const value = Math.min(100, Math.max(0, parseInt(pct) || 0));
+
+    if (bar)   bar.style.width = `${value}%`;
+    if (label) label.textContent = `${value}%`;
+
+    if (bar) {
+        if (value >= 75)      bar.style.background = 'linear-gradient(90deg, #10b981, #00f2fe)';
+        else if (value >= 50) bar.style.background = 'linear-gradient(90deg, #f59e0b, #4facfe)';
+        else                  bar.style.background = 'linear-gradient(90deg, #ef4444, #f59e0b)';
+    }
+}
+
+function updateMomentumGrid(data) {
+    const fields = {
+        'mom-momentum':  data.momentum || '—',
+        'mom-risk':      data.risk_level || '—',
+        'mom-direction': data.direction || '—',
+        'mom-trend':     data.trend_strength || '—',
+    };
+
+    Object.entries(fields).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = val;
+
+        if (['BULLISH', 'STRONG', 'LOW'].includes(val))  el.style.color = 'var(--green)';
+        else if (['BEARISH', 'HIGH'].includes(val))       el.style.color = 'var(--red)';
+        else if (['SIDEWAYS', 'MODERATE', 'MEDIUM'].includes(val)) el.style.color = 'var(--yellow)';
+        else el.style.color = 'var(--text-primary)';
+    });
+}
+
+function updatePOILevels(data) {
+    const poiSection = document.getElementById('poi-section');
+    if (poiSection) poiSection.style.display = 'block';
+
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val || '—';
+    };
+
+    setVal('poi-entry', data.entry);
+    setVal('poi-sl',    data.stop_loss);
+    setVal('poi-tp1',   data.take_profit_1);
+    setVal('poi-tp2',   data.take_profit_2);
+}
+
+function updateSMCOutput(text) {
+    const el = document.getElementById('smc-output');
+    if (!el || !text) return;
+
+    el.innerHTML = `<div class="smc-text">${escapeHtml(text)
+        .replace(/(BULLISH|naik|uptrend|buy|breakout)/gi, '<span class="highlight-bull">$1</span>')
+        .replace(/(BEARISH|turun|downtrend|sell|breakdown)/gi, '<span class="highlight-bear">$1</span>')
+        .replace(/(SIDEWAYS|konsolidasi|ranging|neutral)/gi, '<span class="highlight-neu">$1</span>')
+        .replace(/(liquidity|order block|fair value gap|FVG|SMC|ICT|supply|demand)/gi, '<span class="highlight-info">$1</span>')
+    }</div>`;
+}
+
+function showVisionResult(text) {
+    const container = document.getElementById('vision-result');
+    const body      = document.getElementById('vision-result-body');
+    if (!container || !body || !text) return;
+
+    body.innerHTML = escapeHtml(text)
+        .replace(/\n/g, '<br>')
+        .replace(/(BULLISH|BUY|breakout)/gi, '<span class="highlight-bull">$1</span>')
+        .replace(/(BEARISH|SELL|breakdown)/gi, '<span class="highlight-bear">$1</span>');
+
+    container.classList.remove('hidden');
+}
+
+function updateMTFMatrix(mtf) {
+    if (!mtf) return;
+
+    const tfs = { m1: 'M1', m5: 'M5', m15: 'M15', h1: 'H1', h4: 'H4', d1: 'D1' };
+
+    Object.entries(tfs).forEach(([key, label]) => {
+        const data = mtf[key];
+        if (!data) return;
+
+        const biasEl   = document.getElementById(`mtf-${key}`);
+        const detailEl = document.getElementById(`mtf-${key}-detail`);
+
+        if (biasEl) {
+            const cls = { BULL: 'bull', BEAR: 'bear', NEUT: 'neut' }[data.bias?.toUpperCase()] || 'neut';
+            const icon = { BULL: '▲', BEAR: '▼', NEUT: '—' }[data.bias?.toUpperCase()] || '—';
+            biasEl.className = `mtf-bias ${cls}`;
+            biasEl.textContent = icon + ' ' + (data.bias || '—');
+        }
+
+        if (detailEl) {
+            detailEl.textContent = data.detail || '';
+        }
+    });
+}
+
+function updateIndicators(indicators) {
+    if (!indicators) return;
+
+    const map = {
+        'ind-rsi':    { val: 'rsi',    sig: 'ind-rsi-sig'    },
+        'ind-macd':   { val: 'macd',   sig: 'ind-macd-sig'   },
+        'ind-ema':    { val: 'ema',     sig: 'ind-ema-sig'    },
+        'ind-sma':    { val: 'sma',     sig: 'ind-sma-sig'    },
+        'ind-bb':     { val: 'bb',      sig: 'ind-bb-sig'     },
+        'ind-volume': { val: 'volume',  sig: 'ind-vol-sig'    },
+        'ind-vwap':   { val: 'vwap',    sig: 'ind-vwap-sig'   },
+        'ind-atr':    { val: 'atr',     sig: 'ind-atr-sig'    },
+    };
+
+    Object.entries(map).forEach(([valId, { val, sig: sigId }]) => {
+        const indData = indicators[val];
+        if (!indData) return;
+
+        const valEl = document.getElementById(valId);
+        const sigEl = document.getElementById(sigId);
+
+        if (valEl) valEl.textContent = indData.value || '—';
+        if (sigEl) {
+            const sigText = indData.signal || 'NEUT';
+            const cls = { BULL: 'bull', BEAR: 'bear', NEUT: 'neut', HIGH: 'bear', LOW: 'bull', NORMAL: 'neut' }[sigText.toUpperCase()] || 'neut';
+            sigEl.className = `ind-signal ${cls}`;
+            sigEl.textContent = sigText;
+        }
+    });
+}
+
+// ================================================================
+// SUPABASE DATABASE
+// ================================================================
+
+async function saveAnalysisToSupabase(data, screenshotUrl = null) {
+    if (!supabaseClient || !currentUser) return;
+
+    const record = {
+        user_id:        currentUser.id,
+        pair:           currentPairLabel,
+        signal:         data.signal || 'WAIT',
+        confidence:     parseInt(data.confidence) || 0,
+        momentum:       data.momentum || null,
+        risk_level:     data.risk_level || null,
+        direction:      data.direction || null,
+        trend_strength: data.trend_strength || null,
+        entry_price:    data.entry || null,
+        stop_loss:      data.stop_loss || null,
+        take_profit_1:  data.take_profit_1 || null,
+        take_profit_2:  data.take_profit_2 || null,
+        analysis_text:  data.analysis || null,
+        screenshot_url: screenshotUrl,
+        mtf_data:       data.mtf || null,
+        indicators_data: data.indicators || null,
+    };
+
+    const { error } = await supabaseClient.from('analysis_history').insert([record]);
+
+    if (error) {
+        console.error('[DB] Save error:', error.message);
+        showToast('warning', 'fa-triangle-exclamation', 'Analisis gagal disimpan ke cloud.');
+    } else {
+        console.log('[DB] Analisis berhasil disimpan.');
+    }
+}
+
+async function loadAnalysisHistory() {
+    const listEl = document.getElementById('history-list');
+    if (!listEl || !supabaseClient || !currentUser) return;
+
+    listEl.innerHTML = Array(3).fill(`
+        <div class="history-item">
+            <div class="skeleton" style="width:60%;height:14px;"></div>
+            <div class="skeleton" style="width:40%;height:10px;margin-top:8px;"></div>
+            <div class="skeleton" style="width:80%;height:10px;margin-top:6px;"></div>
+        </div>
+    `).join('');
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('analysis_history')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            listEl.innerHTML = `
+                <div class="history-empty">
+                    <i class="fa-solid fa-inbox"></i>
+                    <p>No analysis records yet.</p>
+                </div>
+            `;
+            return;
+        }
+
+        listEl.innerHTML = data.map(item => renderHistoryItem(item)).join('');
+
+    } catch (err) {
+        console.error('[DB] Load history error:', err.message);
+        listEl.innerHTML = `
+            <div class="history-empty">
+                <i class="fa-solid fa-triangle-exclamation" style="color:var(--yellow)"></i>
+                <p>Gagal memuat history.<br>Cek koneksi dan coba refresh.</p>
+            </div>
+        `;
+    }
+}
+
+function renderHistoryItem(item) {
+    const signalCls = {
+        'BUY': 'bull', 'STRONG_BUY': 'bull',
+        'SELL': 'bear', 'STRONG_SELL': 'bear',
+        'WAIT': 'neut',
+    }[item.signal?.toUpperCase()] || 'neut';
+
+    const date = new Date(item.created_at);
+    const dateStr = date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+    const thumbHtml = item.screenshot_url
+        ? `<img src="${escapeHtml(item.screenshot_url)}" class="hist-screenshot-thumb" alt="Chart" loading="lazy" onerror="this.style.display='none'" />`
+        : '';
+
+    const previewText = item.analysis_text
+        ? escapeHtml(item.analysis_text.substring(0, 80)) + '...'
+        : '';
+
+    return `
+        <div class="history-item">
+            <div class="hist-header">
+                <span class="hist-pair">${escapeHtml(item.pair)}</span>
+                <span class="hist-signal ${signalCls}">${item.signal || 'WAIT'}</span>
+            </div>
+            <div class="hist-meta">
+                <span class="hist-meta-item"><i class="fa-solid fa-calendar"></i>${dateStr}</span>
+                <span class="hist-meta-item"><i class="fa-solid fa-clock"></i>${timeStr}</span>
+            </div>
+            ${thumbHtml}
+            <div class="hist-preview">${previewText}</div>
+        </div>
+    `;
+}
+
+// ================================================================
+// UTILITY & RESPONSIVE PANELS
+// ================================================================
+
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function setMobileActivePanel(panelId) {
+    document.querySelectorAll('.mobile-panel').forEach(p => {
+        p.classList.remove('active');
+        p.classList.add('hidden'); 
+    });
     
-    // 4. Masukkan iframe ke dalam container
-    container.appendChild(iframe);
+    const targetPanel = document.getElementById(`panel-${panelId}`);
+    if (targetPanel) {
+        targetPanel.classList.add('active');
+        targetPanel.classList.remove('hidden');
+    }
+
+    document.querySelectorAll('.mobile-tab-btn').forEach(btn => btn.classList.remove('active'));
+    const targetBtn = document.getElementById(`tab-btn-${panelId}`);
+    if (targetBtn) targetBtn.classList.add('active');
 }
