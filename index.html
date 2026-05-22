@@ -6,22 +6,29 @@
   <meta name="theme-color" content="#060913" />
   <meta name="description" content="PEN SYNERGY AI — Institutional-Grade AI Trading Analyzer" />
   <title>PEN SYNERGY AI | Trading Terminal</title>
+
+  <!-- TradingView -->
   <script src="https://s3.tradingview.com/tv.js"></script>
-  
+
+  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
+  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
 
+  <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
+  <!-- ── TOAST CONTAINER ── -->
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
+  <!-- ── GLOBAL LOADER ── -->
   <div id="global-loader" class="global-loader">
     <div class="loader-inner">
       <div class="loader-logo">
@@ -36,11 +43,16 @@
     </div>
   </div>
 
+  <!-- ════════════════════════════════════════════════════════
+       AUTH OVERLAY
+       ════════════════════════════════════════════════════════ -->
   <div id="auth-overlay" class="auth-overlay hidden">
     <div class="auth-bg-grid"></div>
     <div class="auth-bg-glow"></div>
 
     <div class="auth-card glass-panel">
+
+      <!-- Brand -->
       <div class="auth-brand">
         <div class="auth-brand-icon">
           <i class="fa-solid fa-hexagon-nodes"></i>
@@ -53,6 +65,7 @@
         <p class="auth-brand-tagline">INSTITUTIONAL AI TRADING TERMINAL</p>
       </div>
 
+      <!-- Tabs -->
       <div class="auth-tabs" role="tablist">
         <button class="auth-tab active" id="tab-login" role="tab" aria-selected="true" onclick="switchAuthTab('login')">
           <i class="fa-solid fa-right-to-bracket"></i> SIGN IN
@@ -62,6 +75,7 @@
         </button>
       </div>
 
+      <!-- Login Panel -->
       <div id="panel-login" class="auth-panel active" role="tabpanel">
         <div class="form-group">
           <label for="login-email" class="form-label"><i class="fa-solid fa-at"></i> EMAIL ADDRESS</label>
@@ -71,24 +85,23 @@
           <label for="login-password" class="form-label"><i class="fa-solid fa-lock"></i> PASSWORD</label>
           <div class="input-password-wrap">
             <input type="password" id="login-password" class="form-input" placeholder="Min. 8 characters" autocomplete="current-password" />
-            <button class="password-toggle" onclick="togglePasswordVisibility('login-password', this)" aria-label="Toggle password visibility">
+            <button class="password-toggle" onclick="togglePasswordVisibility('login-password', this)" aria-label="Toggle password visibility" type="button">
               <i class="fa-solid fa-eye"></i>
             </button>
           </div>
-          
-          <div style="text-align: right; margin-top: 10px;">
-            <a href="javascript:void(0)" onclick="handleForgotPassword()" style="color: #64748b; font-size: 0.75rem; text-decoration: none; cursor: pointer; letter-spacing: 0.5px;">
-                <i class="fa-solid fa-circle-question"></i> LUPA PASSWORD?
+          <div style="text-align:right; margin-top:10px;">
+            <a href="javascript:void(0)" onclick="handleForgotPassword()" class="forgot-link">
+              <i class="fa-solid fa-circle-question"></i> LUPA PASSWORD?
             </a>
           </div>
         </div>
-
-        <button class="btn-primary" id="btn-login" onclick="handleLogin()">
+        <button class="btn-primary" id="btn-login" onclick="handleLogin()" type="button">
           <span class="btn-text"><i class="fa-solid fa-bolt"></i> ACCESS TERMINAL</span>
           <span class="btn-loader hidden"><i class="fa-solid fa-spinner fa-spin"></i> AUTHENTICATING...</span>
         </button>
       </div>
 
+      <!-- Register Panel -->
       <div id="panel-register" class="auth-panel" role="tabpanel">
         <div class="form-group">
           <label for="register-email" class="form-label"><i class="fa-solid fa-at"></i> EMAIL ADDRESS</label>
@@ -98,7 +111,7 @@
           <label for="register-password" class="form-label"><i class="fa-solid fa-lock"></i> CREATE PASSWORD</label>
           <div class="input-password-wrap">
             <input type="password" id="register-password" class="form-input" placeholder="Min. 8 characters" autocomplete="new-password" />
-            <button class="password-toggle" onclick="togglePasswordVisibility('register-password', this)" aria-label="Toggle password visibility">
+            <button class="password-toggle" onclick="togglePasswordVisibility('register-password', this)" aria-label="Toggle" type="button">
               <i class="fa-solid fa-eye"></i>
             </button>
           </div>
@@ -107,29 +120,32 @@
           <label for="register-confirm" class="form-label"><i class="fa-solid fa-shield-check"></i> CONFIRM PASSWORD</label>
           <div class="input-password-wrap">
             <input type="password" id="register-confirm" class="form-input" placeholder="Re-enter password" autocomplete="new-password" />
-            <button class="password-toggle" onclick="togglePasswordVisibility('register-confirm', this)" aria-label="Toggle password visibility">
+            <button class="password-toggle" onclick="togglePasswordVisibility('register-confirm', this)" aria-label="Toggle" type="button">
               <i class="fa-solid fa-eye"></i>
             </button>
           </div>
         </div>
-        <button class="btn-primary" id="btn-register" onclick="handleRegister()">
+        <button class="btn-primary" id="btn-register" onclick="handleRegister()" type="button">
           <span class="btn-text"><i class="fa-solid fa-key"></i> CREATE ACCOUNT</span>
           <span class="btn-loader hidden"><i class="fa-solid fa-spinner fa-spin"></i> CREATING...</span>
         </button>
       </div>
 
+      <!-- Reset Password Panel -->
       <div id="panel-reset" class="auth-panel" role="tabpanel">
+        <p class="reset-info"><i class="fa-solid fa-info-circle"></i> Masukkan password baru untuk akun Anda.</p>
         <div class="form-group">
           <label for="reset-password" class="form-label"><i class="fa-solid fa-lock"></i> PASSWORD BARU</label>
           <div class="input-password-wrap">
             <input type="password" id="reset-password" class="form-input" placeholder="Min. 8 characters" autocomplete="new-password" />
-            <button class="password-toggle" onclick="togglePasswordVisibility('reset-password', this)" aria-label="Toggle password visibility" type="button">
+            <button class="password-toggle" onclick="togglePasswordVisibility('reset-password', this)" aria-label="Toggle" type="button">
               <i class="fa-solid fa-eye"></i>
             </button>
           </div>
         </div>
-        <button class="btn-primary" id="btn-update-password" onclick="handleUpdatePassword()">
+        <button class="btn-primary" id="btn-update-password" onclick="handleUpdatePassword()" type="button">
           <span class="btn-text"><i class="fa-solid fa-key"></i> SIMPAN PASSWORD BARU</span>
+          <span class="btn-loader hidden"><i class="fa-solid fa-spinner fa-spin"></i> UPDATING...</span>
         </button>
       </div>
 
@@ -140,7 +156,12 @@
     </div>
   </div>
 
+  <!-- ════════════════════════════════════════════════════════
+       WORKSPACE
+       ════════════════════════════════════════════════════════ -->
   <div id="workspace" class="workspace hidden">
+
+    <!-- TOPBAR -->
     <header class="topbar glass-panel">
       <div class="topbar-left">
         <div class="brand-logo">
@@ -169,7 +190,7 @@
             <span class="user-email-label">ANALYST</span>
             <span class="user-email" id="topbar-email">—</span>
           </div>
-          <button class="btn-signout" id="btn-signout" onclick="handleSignOut()">
+          <button class="btn-signout" id="btn-signout" onclick="handleSignOut()" type="button">
             <i class="fa-solid fa-right-from-bracket"></i>
             <span>EXIT</span>
           </button>
@@ -177,9 +198,65 @@
       </div>
     </header>
 
+    <!-- MOBILE NAV -->
+    <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
+      <button class="mnav-btn active" onclick="mobileNav('chart', this)" data-target="chart">
+        <i class="fa-solid fa-chart-candlestick"></i>
+        <span>CHART</span>
+      </button>
+      <button class="mnav-btn" onclick="mobileNav('ai', this)" data-target="ai">
+        <i class="fa-solid fa-brain-circuit"></i>
+        <span>AI</span>
+      </button>
+      <button class="mnav-btn" onclick="mobileNav('scan', this)" data-target="scan">
+        <i class="fa-solid fa-camera-viewfinder"></i>
+        <span>SCAN</span>
+      </button>
+      <button class="mnav-btn" onclick="mobileNav('history', this)" data-target="history">
+        <i class="fa-solid fa-database"></i>
+        <span>HISTORY</span>
+      </button>
+    </nav>
+
+    <!-- ── MAIN DASHBOARD GRID (3 COLUMNS) ── -->
     <main class="dashboard-grid">
+
+      <!-- ╔══════════════════╗
+           ║  COL LEFT        ║
+           ║  Analysis History ║
+           ╚══════════════════╝ -->
       <section class="col-left">
-        <div class="panel glass-panel" id="chart-section">
+
+        <!-- HISTORY PANEL -->
+        <div class="panel glass-panel" id="history-section" data-mobile="history">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="fa-solid fa-database"></i>
+              <span>ANALYSIS HISTORY</span>
+            </div>
+            <button class="btn-refresh" onclick="loadAnalysisHistory()" type="button">
+              <i class="fa-solid fa-rotate-right"></i> REFRESH
+            </button>
+          </div>
+          <div class="history-list" id="history-list">
+            <div class="history-empty">
+              <i class="fa-solid fa-inbox"></i>
+              <p>No analysis records yet.</p>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ╔══════════════════╗
+           ║  COL CENTER      ║
+           ║  Chart + Metrics ║
+           ║  + Screenshot    ║
+           ╚══════════════════╝ -->
+      <section class="col-center">
+
+        <!-- LIVE CHART -->
+        <div class="panel glass-panel" id="chart-section" data-mobile="chart">
           <div class="panel-header">
             <div class="panel-title">
               <i class="fa-solid fa-chart-candlestick"></i>
@@ -191,7 +268,7 @@
                   <option value="FX:EURUSD" selected>EUR/USD</option>
                   <option value="FX:GBPUSD">GBP/USD</option>
                   <option value="FX:USDJPY">USD/JPY</option>
-                  <option value="FOREXCOM:GOLD">XAU/USD (Gold)</option>
+                  <option value="OANDA:GOLD">XAU/USD (Gold)</option>
                 </optgroup>
                 <optgroup label="— CRYPTO —">
                   <option value="BINANCE:BTCUSDT">BTC/USDT</option>
@@ -207,7 +284,8 @@
           <div class="tradingview-wrapper" id="tradingview-container"></div>
         </div>
 
-        <div class="panel glass-panel" id="ticker-section">
+        <!-- LIVE MARKET METRICS -->
+        <div class="panel glass-panel" id="ticker-section" data-mobile="chart">
           <div class="panel-header">
             <div class="panel-title">
               <i class="fa-solid fa-wave-square"></i>
@@ -218,26 +296,93 @@
             </div>
           </div>
           <div class="ticker-grid" id="ticker-grid">
-            </div>
+            <!-- Diisi oleh JS -->
+          </div>
         </div>
+
+        <!-- SCREENSHOT UPLOAD -->
+        <div class="panel glass-panel" id="screenshot-section" data-mobile="scan">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="fa-solid fa-camera-viewfinder"></i>
+              <span>CHART SCREENSHOT ANALYZER</span>
+            </div>
+            <div id="upload-status" class="upload-status-badge hidden">
+              <i class="fa-solid fa-circle-check"></i> READY
+            </div>
+          </div>
+
+          <!-- Dropzone -->
+          <div class="dropzone" id="dropzone"
+            onclick="document.getElementById('file-input').click()"
+            ondragover="handleDragOver(event)"
+            ondragleave="handleDragLeave(event)"
+            ondrop="handleDrop(event)">
+            <input type="file" id="file-input" accept="image/*" hidden onchange="handleFileSelect(event)" />
+
+            <!-- Placeholder (shown when no image) -->
+            <div class="dropzone-inner" id="dropzone-placeholder">
+              <div class="dropzone-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+              <div class="dropzone-title">UPLOAD CHART SCREENSHOT</div>
+              <p class="dropzone-sub">Drag & drop atau klik untuk pilih file</p>
+              <span class="dropzone-formats">PNG · JPG · WEBP · max 10MB</span>
+            </div>
+
+            <!-- Preview (shown after upload) -->
+            <div class="dropzone-preview hidden" id="dropzone-preview">
+              <img id="preview-img" src="" alt="Chart preview" />
+              <div class="preview-overlay">
+                <button class="preview-clear-btn" onclick="clearUploadedImage(event)" type="button">
+                  <i class="fa-solid fa-trash"></i> HAPUS
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action bar -->
+          <div class="screenshot-action-bar">
+            <button class="btn-analyze full-width" onclick="runAIAnalysis()" id="btn-scan-analyze" type="button">
+              <i class="fa-solid fa-microchip"></i> ANALYZE WITH AI
+            </button>
+          </div>
+
+          <!-- Vision result -->
+          <div class="vision-result hidden" id="vision-result">
+            <div class="vision-result-header">
+              <i class="fa-solid fa-brain-circuit"></i> SCREENSHOT ANALYSIS RESULT
+            </div>
+            <div class="vision-result-body" id="vision-result-body"></div>
+          </div>
+        </div>
+
       </section>
 
+      <!-- ╔══════════════════╗
+           ║  COL RIGHT       ║
+           ║  AI Signal       ║
+           ║  MTF Matrix      ║
+           ║  Indicators      ║
+           ╚══════════════════╝ -->
       <section class="col-right">
-        <div class="panel glass-panel" id="ai-section">
+
+        <!-- AI SIGNAL ENGINE -->
+        <div class="panel glass-panel" id="ai-section" data-mobile="ai">
           <div class="panel-header">
             <div class="panel-title">
               <i class="fa-solid fa-brain-circuit"></i>
               <span>AI SIGNAL ENGINE</span>
             </div>
-            <button class="btn-analyze" id="btn-run-analysis" onclick="runAIAnalysis()">
+            <button class="btn-analyze" id="btn-run-analysis" onclick="runAIAnalysis()" type="button">
               <i class="fa-solid fa-microchip"></i> RUN ANALYSIS
             </button>
           </div>
+
+          <!-- Signal Badge + Confidence -->
           <div class="signal-display" id="signal-display">
             <div class="signal-badge-wrap">
               <div class="signal-badge wait" id="signal-badge">
                 <i class="fa-solid fa-hourglass-half"></i>
-                <span>AWAITING DATA</span>
+                <span id="signal-text">AWAITING DATA</span>
               </div>
             </div>
             <div class="confidence-wrap">
@@ -250,28 +395,100 @@
               </div>
             </div>
           </div>
+
+          <!-- Momentum + Risk Row -->
+          <div class="momentum-grid" id="momentum-grid" style="padding: 0 18px 14px;">
+            <div class="momentum-item">
+              <span class="mom-label">MOMENTUM</span>
+              <span class="mom-value" id="mom-momentum">—</span>
+            </div>
+            <div class="momentum-item">
+              <span class="mom-label">RISK LEVEL</span>
+              <span class="mom-value" id="mom-risk">—</span>
+            </div>
+            <div class="momentum-item">
+              <span class="mom-label">DIRECTION</span>
+              <span class="mom-value" id="mom-direction">—</span>
+            </div>
+            <div class="momentum-item">
+              <span class="mom-label">TREND STR.</span>
+              <span class="mom-value" id="mom-trend">—</span>
+            </div>
+          </div>
+
+          <!-- POI Levels -->
+          <div class="indicator-section" id="poi-section" style="display:none;">
+            <div class="indicator-header">
+              <i class="fa-solid fa-crosshairs"></i> PRICE LEVELS
+            </div>
+            <div class="poi-levels">
+              <div class="poi-item entry">
+                <div class="poi-label"><i class="fa-solid fa-arrow-right-to-bracket"></i> ENTRY</div>
+                <div class="poi-value" id="poi-entry">—</div>
+              </div>
+              <div class="poi-item sl">
+                <div class="poi-label"><i class="fa-solid fa-shield-xmark"></i> STOP LOSS</div>
+                <div class="poi-value" id="poi-sl">—</div>
+              </div>
+              <div class="poi-item tp1">
+                <div class="poi-label"><i class="fa-solid fa-bullseye"></i> TAKE PROFIT 1</div>
+                <div class="poi-value" id="poi-tp1">—</div>
+              </div>
+              <div class="poi-item tp2">
+                <div class="poi-label"><i class="fa-solid fa-bullseye"></i> TAKE PROFIT 2</div>
+                <div class="poi-value" id="poi-tp2">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SMC Analysis Text -->
           <div class="smc-output" id="smc-output">
-            <p style="color:var(--text-muted);text-align:center">Run analysis to generate AI trading signals.</p>
+            <p style="color:var(--text-muted);text-align:center;font-family:var(--font-mono);font-size:0.72rem;">
+              Run analysis to generate AI trading signals.
+            </p>
           </div>
         </div>
 
-        <div class="panel glass-panel" id="history-section">
+        <!-- MULTI-TIMEFRAME MATRIX -->
+        <div class="panel glass-panel" id="mtf-section" data-mobile="ai">
           <div class="panel-header">
             <div class="panel-title">
-              <i class="fa-solid fa-database"></i>
-              <span>ANALYSIS HISTORY</span>
+              <i class="fa-solid fa-layer-group"></i>
+              <span>MULTI-TIMEFRAME ANALYSIS</span>
             </div>
-            <button class="btn-refresh" onclick="loadAnalysisHistory()">
-              <i class="fa-solid fa-rotate-right"></i> REFRESH
-            </button>
           </div>
-          <div class="history-list" id="history-list">
-            <div class="history-empty">
-              <i class="fa-solid fa-inbox"></i>
-              <p>No analysis records yet.</p>
+          <div class="mtf-grid" id="mtf-grid">
+            <div class="mtf-cell"><div class="mtf-tf">M1</div><div class="mtf-bias neut" id="mtf-m1">—</div><div class="mtf-detail" id="mtf-m1-detail">Awaiting</div></div>
+            <div class="mtf-cell"><div class="mtf-tf">M5</div><div class="mtf-bias neut" id="mtf-m5">—</div><div class="mtf-detail" id="mtf-m5-detail">Awaiting</div></div>
+            <div class="mtf-cell"><div class="mtf-tf">M15</div><div class="mtf-bias neut" id="mtf-m15">—</div><div class="mtf-detail" id="mtf-m15-detail">Awaiting</div></div>
+            <div class="mtf-cell"><div class="mtf-tf">H1</div><div class="mtf-bias neut" id="mtf-h1">—</div><div class="mtf-detail" id="mtf-h1-detail">Awaiting</div></div>
+            <div class="mtf-cell"><div class="mtf-tf">H4</div><div class="mtf-bias neut" id="mtf-h4">—</div><div class="mtf-detail" id="mtf-h4-detail">Awaiting</div></div>
+            <div class="mtf-cell"><div class="mtf-tf">DAILY</div><div class="mtf-bias neut" id="mtf-d1">—</div><div class="mtf-detail" id="mtf-d1-detail">Awaiting</div></div>
+          </div>
+        </div>
+
+        <!-- TECHNICAL INDICATORS -->
+        <div class="panel glass-panel" id="indicators-section" data-mobile="ai">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="fa-solid fa-gauge-high"></i>
+              <span>TECHNICAL INDICATORS</span>
+            </div>
+          </div>
+          <div class="indicator-section">
+            <div class="indicator-grid" id="indicator-grid">
+              <div class="ind-item"><div class="ind-name">RSI (14)</div><div class="ind-value" id="ind-rsi">—</div><div class="ind-signal neut" id="ind-rsi-sig">NEUTRAL</div></div>
+              <div class="ind-item"><div class="ind-name">MACD</div><div class="ind-value" id="ind-macd">—</div><div class="ind-signal neut" id="ind-macd-sig">NEUTRAL</div></div>
+              <div class="ind-item"><div class="ind-name">EMA (20)</div><div class="ind-value" id="ind-ema">—</div><div class="ind-signal neut" id="ind-ema-sig">NEUTRAL</div></div>
+              <div class="ind-item"><div class="ind-name">SMA (50)</div><div class="ind-value" id="ind-sma">—</div><div class="ind-signal neut" id="ind-sma-sig">NEUTRAL</div></div>
+              <div class="ind-item"><div class="ind-name">BOLL. BANDS</div><div class="ind-value" id="ind-bb">—</div><div class="ind-signal neut" id="ind-bb-sig">NEUTRAL</div></div>
+              <div class="ind-item"><div class="ind-name">VOLUME</div><div class="ind-value" id="ind-volume">—</div><div class="ind-signal neut" id="ind-vol-sig">NEUTRAL</div></div>
+              <div class="ind-item"><div class="ind-name">VWAP</div><div class="ind-value" id="ind-vwap">—</div><div class="ind-signal neut" id="ind-vwap-sig">NEUTRAL</div></div>
+              <div class="ind-item"><div class="ind-name">ATR (14)</div><div class="ind-value" id="ind-atr">—</div><div class="ind-signal neut" id="ind-atr-sig">NORMAL</div></div>
             </div>
           </div>
         </div>
+
       </section>
     </main>
 
@@ -279,8 +496,110 @@
       <span>PEN SYNERGY AI © 2025 — Institutional Trading Terminal</span>
       <span>For educational purposes only. Not financial advice.</span>
     </footer>
+
+  </div><!-- /#workspace -->
+  <!-- ================================================================
+     TAMBAHAN PANEL HTML — Tambahkan ke index.html
+     ================================================================ -->
+
+<!-- ── RISK / LOT CALCULATOR ──
+     Letakkan di dalam <section class="col-left"> setelah panel history -->
+<div class="panel glass-panel" id="calculator-section" data-mobile="ai">
+  <div class="panel-header">
+    <div class="panel-title">
+      <i class="fa-solid fa-calculator"></i>
+      <span>LOT SIZE CALCULATOR</span>
+    </div>
+  </div>
+  <div style="padding: 16px 18px; display:flex; flex-direction:column; gap:12px;">
+
+    <!-- Pair selector -->
+    <div class="form-group">
+      <label class="form-label" style="font-size:0.6rem;">
+        <i class="fa-solid fa-chart-line"></i> PAIR
+      </label>
+      <select id="calc-pair" class="select-input" style="width:100%; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; padding:8px 10px; color:var(--text-primary); font-family:var(--font-mono); font-size:0.75rem; outline:none;">
+        <option value="EUR/USD">EUR/USD</option>
+        <option value="GBP/USD">GBP/USD</option>
+        <option value="USD/JPY">USD/JPY</option>
+        <option value="XAU/USD">XAU/USD (Gold)</option>
+        <option value="BTC/USDT">BTC/USDT</option>
+        <option value="ETH/USDT">ETH/USDT</option>
+      </select>
+    </div>
+
+    <!-- Balance -->
+    <div class="form-group">
+      <label class="form-label" style="font-size:0.6rem;">
+        <i class="fa-solid fa-wallet"></i> BALANCE ($)
+      </label>
+      <input type="number" id="calc-balance" class="form-input" placeholder="e.g. 1000" min="1" style="font-size:0.8rem; padding:9px 12px;" />
+    </div>
+
+    <!-- Risk % -->
+    <div class="form-group">
+      <label class="form-label" style="font-size:0.6rem;">
+        <i class="fa-solid fa-percent"></i> RISK PER TRADE (%)
+      </label>
+      <input type="number" id="calc-risk" class="form-input" placeholder="e.g. 1" value="1" min="0.1" max="10" step="0.1" style="font-size:0.8rem; padding:9px 12px;" />
+    </div>
+
+    <!-- SL in pips -->
+    <div class="form-group">
+      <label class="form-label" style="font-size:0.6rem;">
+        <i class="fa-solid fa-shield-xmark"></i> STOP LOSS (PIPS)
+      </label>
+      <input type="number" id="calc-sl-pips" class="form-input" placeholder="e.g. 20" min="1" style="font-size:0.8rem; padding:9px 12px;" />
+    </div>
+
+    <!-- Result -->
+    <div style="background:rgba(0,242,254,0.05); border:1px solid var(--border-active); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-family:var(--font-mono); font-size:0.6rem; color:var(--text-muted); letter-spacing:0.14em; margin-bottom:6px;">RECOMMENDED LOT SIZE</div>
+      <div id="calc-result" style="font-family:var(--font-display); font-size:1.6rem; font-weight:900; color:var(--cyan); text-shadow:0 0 20px var(--cyan-glow);">—</div>
+      <div id="calc-detail" style="font-family:var(--font-mono); font-size:0.58rem; color:var(--text-muted); margin-top:6px;"></div>
+    </div>
+
+    <p style="font-family:var(--font-mono); font-size:0.55rem; color:var(--text-muted); text-align:center; line-height:1.5;">
+      <i class="fa-solid fa-info-circle" style="color:var(--cyan);"></i>
+      Menggunakan MathFloor — hasil dibulatkan ke bawah demi keamanan modal.
+    </p>
+
+  </div>
+</div>
+
+
+<!-- ── NEWS SENTIMENT ANALYZER ──
+     Letakkan di dalam <section class="col-right"> paling bawah -->
+<div class="panel glass-panel" id="news-section" data-mobile="ai">
+  <div class="panel-header">
+    <div class="panel-title">
+      <i class="fa-solid fa-newspaper"></i>
+      <span>NEWS SENTIMENT ENGINE</span>
+    </div>
+    <button class="btn-analyze" id="btn-analyze-news" onclick="analyzeNewsSentiment()" type="button">
+      <i class="fa-solid fa-newspaper"></i> ANALYZE NEWS
+    </button>
   </div>
 
+  <div style="padding: 16px 18px; display:flex; flex-direction:column; gap:12px;">
+    <div class="form-group">
+      <label class="form-label" style="font-size:0.6rem;">
+        <i class="fa-solid fa-paste"></i> PASTE TEKS BERITA
+      </label>
+      <textarea id="news-input" class="form-input" rows="4"
+        placeholder="Paste berita ekonomi di sini... (NFP, CPI, Fed rate, dll)"
+        style="resize:vertical; font-size:0.75rem; padding:10px 12px; line-height:1.6;"></textarea>
+    </div>
+
+    <div id="sentiment-result" style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-muted); text-align:center; padding:10px 0;">
+      Paste berita lalu klik ANALYZE NEWS.
+    </div>
+  </div>
+</div>
+
+  <!-- Script loading order: supabase → app → auth -->
+  <script src="supabase.js"></script>
   <script src="app.js"></script>
+  <script src="auth.js"></script>
 </body>
 </html>
