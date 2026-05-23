@@ -5,7 +5,10 @@
 // ── CONFIG ──
 // GANTI AI DI SINI SAJA ('openai', 'gemini', atau 'claude')
 const CONFIG = {
-    AI_PROVIDER: 'claude', 
+    // SESUDAH — pilih salah satu
+AI_PROVIDER: 'gemini',   // Gemini (gratis tier ada)
+// atau
+AI_PROVIDER: 'openai',   // OpenAI GPT-4o (berbayar tapi lebih murah dari Claude)
     STORAGE_BUCKET: 'screenshots',
     TICKER_INTERVAL: 4000,
 };
