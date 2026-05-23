@@ -6,7 +6,66 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Metode tidak diizinkan' });
     }
 
-    const { provider, pair, imageBase64 } = req.body;
+    const { provider, pair, imageBase64, mode, newsText } = req.body;
+
+    // ── MODE: NEWS SENTIMENT (route terpisah) ──
+    if (mode === 'sentiment') {
+        if (!newsText) return res.status(400).json({ error: 'newsText wajib diisi' });
+
+        const buildSentimentPrompt = (text) => `Analisis sentimen berita finansial ini.
+Kembalikan HANYA JSON valid (tanpa markdown):
+{
+  "impact_level": "LOW|MEDIUM|HIGH",
+  "overall_sentiment": "BULLISH|BEARISH|NEUTRAL",
+  "pairs": [
+    { "pair": "EUR/USD", "sentiment": "BULLISH|BEARISH|NEUTRAL", "reason": "<1 kalimat>" },
+    { "pair": "GBP/USD", "sentiment": "BULLISH|BEARISH|NEUTRAL", "reason": "<1 kalimat>" },
+    { "pair": "USD/JPY", "sentiment": "BULLISH|BEARISH|NEUTRAL", "reason": "<1 kalimat>" },
+    { "pair": "XAU/USD", "sentiment": "BULLISH|BEARISH|NEUTRAL", "reason": "<1 kalimat>" }
+  ],
+  "summary": "<dampak berita 2-3 kalimat bahasa Indonesia>"
+}
+Berita: ${text}`;
+
+        try {
+            let sentText = '';
+            const sp = buildSentimentPrompt(newsText);
+
+            if (provider === 'openai') {
+                const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+                    body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: sp }], temperature: 0, response_format: { type: 'json_object' } }),
+                });
+                const d = await r.json();
+                sentText = d.choices[0].message.content;
+
+            } else if (provider === 'gemini') {
+                const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: sp }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }),
+                });
+                const d = await r.json();
+                sentText = d.candidates[0].content.parts[0].text;
+
+            } else if (provider === 'claude') {
+                const r = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+                    body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 800, messages: [{ role: 'user', content: sp }] }),
+                });
+                const d = await r.json();
+                sentText = d.content[0].text;
+            }
+
+            const clean = sentText.replace(/```json\n?|```\n?/g, '').trim();
+            return res.status(200).json(JSON.parse(clean));
+
+        } catch (err) {
+            return res.status(500).json({ error: 'Sentiment analysis gagal: ' + err.message });
+        }
+    }
 
     // --- PROMPT TRADING EXPERT ---
     const systemPrompt = `You are an elite institutional trading analyst specializing in Smart Money Concepts (SMC), ICT methodology, and technical analysis. You have 20+ years of experience reading institutional order flow, liquidity sweeps, supply/demand zones, and market structure.
