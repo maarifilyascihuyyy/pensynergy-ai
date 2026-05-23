@@ -388,26 +388,6 @@ async function runAIAnalysis() {
     }
 }
 
-// Fungsi paling krusial: Nembak ke Vercel Serverless Function
-async function callAIAPI(pair, imageBase64 = null) {
-    const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            provider: CONFIG.AI_PROVIDER.toLowerCase(), // Ngirim provider (openai/gemini/claude)
-            pair: pair, 
-            imageBase64: imageBase64 
-        })
-    });
-
-    if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Server error');
-    }
-
-    return await response.json(); // Hasil akhirnya otomatis dikembalikan
-}
-
 function setAnalysisButtonsState(loading) {
     const btns = [
         document.getElementById('btn-run-analysis'),
@@ -729,3 +709,190 @@ function setMobileActivePanel(panelId) {
     const targetBtn = document.getElementById(`tab-btn-${panelId}`);
     if (targetBtn) targetBtn.classList.add('active');
 }
+// ================================================================
+// CALL AI API — via Vercel backend (/api/analyze)
+// API key aman di server, tidak exposed ke browser
+// ================================================================
+async function callAIAPI(pair, imageBase64 = null) {
+    const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            provider:    CONFIG.AI_PROVIDER.toLowerCase(),
+            pair:        pair,
+            imageBase64: imageBase64 || null,
+        }),
+    });
+
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${response.status}`);
+    }
+
+    return await response.json();
+}
+
+// ================================================================
+// RISK / LOT CALCULATOR
+// ================================================================
+const TICK_VALUES = {
+    'EUR/USD': 10.00, 'GBP/USD': 10.00, 'USD/JPY': 9.09,
+    'XAU/USD': 10.00, 'BTC/USDT': 1.00, 'ETH/USDT': 1.00,
+    'DEFAULT': 10.00,
+};
+
+function calculateLotSize() {
+    const balance = parseFloat(document.getElementById('calc-balance')?.value) || 0;
+    const riskPct = parseFloat(document.getElementById('calc-risk')?.value)    || 1;
+    const slPips  = parseFloat(document.getElementById('calc-sl-pips')?.value) || 0;
+    const pair    = document.getElementById('calc-pair')?.value || 'DEFAULT';
+
+    const resultEl = document.getElementById('calc-result');
+    const detailEl = document.getElementById('calc-detail');
+
+    if (balance <= 0 || slPips <= 0) {
+        if (resultEl) resultEl.textContent = '—';
+        if (detailEl) detailEl.textContent = 'Isi semua field terlebih dahulu.';
+        return;
+    }
+
+    const tickValue  = TICK_VALUES[pair] || TICK_VALUES['DEFAULT'];
+    const amountRisk = balance * (riskPct / 100);
+    const lotRaw     = amountRisk / (slPips * tickValue);
+    // MathFloor — bulatkan ke bawah demi keamanan modal
+    const lotFinal   = Math.max(Math.floor(lotRaw * 100) / 100, 0.01);
+    const maxLoss    = (slPips * tickValue * lotFinal).toFixed(2);
+
+    if (resultEl) resultEl.textContent = lotFinal.toFixed(2) + ' LOT';
+    if (detailEl) {
+        detailEl.innerHTML = `
+            <span style="color:var(--cyan)">Risiko: $${amountRisk.toFixed(2)}</span> &nbsp;|&nbsp;
+            <span style="color:var(--yellow)">Tick: $${tickValue}</span> &nbsp;|&nbsp;
+            <span style="color:var(--green)">Max Loss: $${maxLoss}</span>
+        `;
+    }
+}
+
+function initRiskCalculator() {
+    ['calc-balance', 'calc-risk', 'calc-sl-pips', 'calc-pair'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', calculateLotSize);
+    });
+}
+
+// ================================================================
+// NEWS SENTIMENT ENGINE — via Vercel backend
+// ================================================================
+async function analyzeNewsSentiment() {
+    const newsText = document.getElementById('news-input')?.value?.trim();
+    if (!newsText) {
+        showToast('warning', 'fa-triangle-exclamation', 'Masukkan teks berita terlebih dahulu!');
+        return;
+    }
+
+    const btn = document.getElementById('btn-analyze-news');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ANALYZING...'; }
+
+    const resultEl = document.getElementById('sentiment-result');
+    if (resultEl) resultEl.innerHTML = '<div class="skeleton" style="height:80px;border-radius:8px;"></div>';
+
+    try {
+        // Pakai endpoint khusus sentiment di backend
+        const response = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                provider: CONFIG.AI_PROVIDER.toLowerCase(),
+                mode:     'sentiment',
+                newsText: newsText,
+            }),
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Server error ${response.status}`);
+        }
+
+        const data = await response.json();
+        renderSentimentResult(data);
+
+    } catch (err) {
+        console.error('[SENTIMENT]', err);
+        if (resultEl) resultEl.innerHTML = `<p style="color:var(--red);font-family:var(--font-mono);font-size:0.72rem;">Gagal: ${escapeHtml(err.message)}</p>`;
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-newspaper"></i> ANALYZE NEWS';
+        }
+    }
+}
+
+function renderSentimentResult(data) {
+    const el = document.getElementById('sentiment-result');
+    if (!el || !data) return;
+
+    const impactColor = { LOW: 'var(--green)', MEDIUM: 'var(--yellow)', HIGH: 'var(--red)' }[data.impact_level] || 'var(--cyan)';
+    const sentColor   = { BULLISH: 'var(--green)', BEARISH: 'var(--red)', NEUTRAL: 'var(--yellow)' };
+
+    const pairsHtml = (data.pairs || []).map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;
+            background:rgba(0,0,0,0.2);border-radius:6px;border:1px solid var(--border);gap:8px;">
+            <span style="font-family:var(--font-display);font-size:0.65rem;color:var(--text-primary);min-width:70px;">${escapeHtml(p.pair)}</span>
+            <span style="font-family:var(--font-mono);font-size:0.6rem;color:${sentColor[p.sentiment] || 'var(--yellow)'};">${p.sentiment}</span>
+            <span style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-muted);text-align:right;">${escapeHtml(p.reason || '')}</span>
+        </div>
+    `).join('');
+
+    el.innerHTML = `
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <span style="font-family:var(--font-mono);font-size:0.6rem;padding:4px 10px;border-radius:99px;
+                border:1px solid ${impactColor};background:rgba(0,0,0,0.2);color:${impactColor};">
+                <i class="fa-solid fa-bolt"></i> ${data.impact_level || '—'} IMPACT
+            </span>
+            <span style="font-family:var(--font-mono);font-size:0.6rem;padding:4px 10px;border-radius:99px;
+                border:1px solid ${sentColor[data.overall_sentiment] || 'var(--yellow)'};
+                background:rgba(0,0,0,0.2);color:${sentColor[data.overall_sentiment] || 'var(--yellow)'};">
+                ${data.overall_sentiment || 'NEUTRAL'}
+            </span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">${pairsHtml}</div>
+        <p style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-secondary);
+            line-height:1.7;padding:10px;background:rgba(0,0,0,0.15);
+            border-radius:6px;border:1px solid var(--border);">
+            ${escapeHtml(data.summary || '')}
+        </p>
+    `;
+}
+
+// ================================================================
+// BOOTSTRAP — DOMContentLoaded
+// ================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('[APP] Initializing PEN SYNERGY AI...');
+
+    // Init risk calculator
+    initRiskCalculator();
+
+    // Setup auth listener (dari auth.js, butuh supabaseClient dari supabase.js)
+    if (typeof setupAuthListener === 'function') {
+        setupAuthListener();
+    } else {
+        setTimeout(() => {
+            if (typeof setupAuthListener === 'function') {
+                setupAuthListener();
+            } else {
+                console.error('[APP] auth.js / supabase.js gagal load!');
+                hideLoader();
+                showAuthUI();
+            }
+        }, 500);
+    }
+
+    // Safety fallback: 5 detik tanpa auth event → paksa tampilkan auth UI
+    setTimeout(() => {
+        if (globalLoader && !globalLoader.classList.contains('hidden')) {
+            console.warn('[APP] Auth timeout — forcing auth UI');
+            hideLoader();
+            showAuthUI();
+        }
+    }, 5000);
+});
