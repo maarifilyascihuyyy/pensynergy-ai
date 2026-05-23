@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
     const { provider, pair, imageBase64, mode, newsText } = req.body;
 
-    // ── MODE: NEWS SENTIMENT (route terpisah) ──
+    // ── MODE: NEWS SENTIMENT ──
     if (mode === 'sentiment') {
         if (!newsText) return res.status(400).json({ error: 'newsText wajib diisi' });
 
@@ -41,15 +41,15 @@ Berita: ${text}`;
                 sentText = d.choices[0].message.content;
 
             } else if (provider === 'gemini') {
-                const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+                const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: [{ parts: [{ text: sp }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }),
                 });
                 const d = await r.json();
                 sentText = d.candidates[0].content.parts[0].text;
-
             }
+
             const clean = sentText.replace(/```json\n?|```\n?/g, '').trim();
             return res.status(200).json(JSON.parse(clean));
 
@@ -58,7 +58,7 @@ Berita: ${text}`;
         }
     }
 
-    // --- PROMPT TRADING EXPERT ---
+    // ── PROMPT TRADING EXPERT ──
     const systemPrompt = `You are an elite institutional trading analyst specializing in Smart Money Concepts (SMC), ICT methodology, and technical analysis. You have 20+ years of experience reading institutional order flow, liquidity sweeps, supply/demand zones, and market structure.
 
 Your task: Analyze the market and return ONLY a valid JSON object (no markdown, no explanation outside JSON).
@@ -104,44 +104,32 @@ JSON structure required:
     try {
         let aiResultText = "";
 
-        // ==========================================
-        // ROUTER 1: OPENAI (GPT-4o)
-        // ==========================================
+        // ── ROUTER 1: OPENAI ──
         if (provider === 'openai') {
             if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY belum disetting di Vercel");
-            
+
             const messages = [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: hasImage 
+                { role: 'user', content: hasImage
                     ? [
                         { type: 'text', text: userPromptText },
                         { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
                       ]
-                    : userPromptText 
+                    : userPromptText
                 }
             ];
 
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-                },
-                body: JSON.stringify({
-                    model: 'gpt-4o',
-                    messages: messages,
-                    response_format: { type: 'json_object' },
-                    temperature: 0.7
-                })
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+                body: JSON.stringify({ model: 'gpt-4o', messages, response_format: { type: 'json_object' }, temperature: 0.7 })
             });
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
             aiResultText = data.choices[0].message.content;
-        } 
-        
-        // ==========================================
-        // ROUTER 2: GEMINI (1.5 Flash / Pro)
-        // ==========================================
+        }
+
+        // ── ROUTER 2: GEMINI 2.0 FLASH ──
         else if (provider === 'gemini') {
             if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY belum disetting di Vercel");
 
@@ -150,29 +138,25 @@ JSON structure required:
                 parts.push({ inlineData: { mimeType: 'image/jpeg', data: imageBase64 } });
             }
 
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ parts }],
-                    generationConfig: { temperature: 0.7, responseMimeType: "application/json" }
+                    generationConfig: { temperature: 0.7, responseMimeType: 'application/json' }
                 })
             });
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
             aiResultText = data.candidates[0].content.parts[0].text;
-        } 
-        
-        else {
-            return res.status(400).json({ error: 'Provider AI tidak dikenali. Pilih: openai atau gemini' });
         }
 
-        // ==========================================
-        // PARSER & PENGEMBALIAN DATA KE FRONTEND
-        // ==========================================
+        else {
+            return res.status(400).json({ error: 'Provider tidak dikenali. Pilih: openai atau gemini' });
+        }
+
         const cleanJsonText = aiResultText.replace(/```json\n?|```\n?/g, '').trim();
         const result = JSON.parse(cleanJsonText);
-
         return res.status(200).json(result);
 
     } catch (error) {
