@@ -49,16 +49,7 @@ Berita: ${text}`;
                 const d = await r.json();
                 sentText = d.candidates[0].content.parts[0].text;
 
-            } else if (provider === 'claude') {
-                const r = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-                    body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 800, messages: [{ role: 'user', content: sp }] }),
-                });
-                const d = await r.json();
-                sentText = d.content[0].text;
             }
-
             const clean = sentText.replace(/```json\n?|```\n?/g, '').trim();
             return res.status(200).json(JSON.parse(clean));
 
@@ -172,42 +163,8 @@ JSON structure required:
             aiResultText = data.candidates[0].content.parts[0].text;
         } 
         
-        // ==========================================
-        // ROUTER 3: CLAUDE (Sonnet 3.5)
-        // ==========================================
-        else if (provider === 'claude') {
-            if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY belum disetting di Vercel");
-
-            const content = [];
-            if (hasImage) {
-                content.push({ 
-                    type: "image", 
-                    source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } 
-                });
-            }
-            content.push({ type: "text", text: userPromptText });
-
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': process.env.ANTHROPIC_API_KEY,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
-                    model: 'claude-3-5-sonnet-20241022',
-                    system: systemPrompt,
-                    max_tokens: 1500,
-                    messages: [{ role: 'user', content: content }]
-                })
-            });
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-            aiResultText = data.content[0].text;
-        } 
-        
         else {
-            return res.status(400).json({ error: 'Provider AI tidak dikenali. Pilih: openai, gemini, claude' });
+            return res.status(400).json({ error: 'Provider AI tidak dikenali. Pilih: openai atau gemini' });
         }
 
         // ==========================================
