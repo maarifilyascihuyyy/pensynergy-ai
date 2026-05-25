@@ -1,19 +1,68 @@
 // /api/analyze.js
 export const maxDuration = 60;
 
+// ================================================================
+// OPENROUTER CONFIG
+// Base URL sama dengan OpenAI, tinggal ganti model
+// Model gratis yang support vision: meta-llama/llama-3.2-11b-vision-instruct:free
+// Model gratis teks only: meta-llama/llama-3.3-70b-instruct:free
+// ================================================================
+
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
+
+const MODELS = {
+    vision: 'meta-llama/llama-3.2-11b-vision-instruct:free', // support screenshot
+    text:   'meta-llama/llama-3.3-70b-instruct:free',        // teks only, lebih pintar
+};
+
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Metode tidak diizinkan' });
     }
 
-    const { provider, pair, imageBase64, mode, newsText } = req.body;
+    const { pair, imageBase64, mode, newsText } = req.body;
 
-    // ── MODE: NEWS SENTIMENT (route terpisah) ──
+    if (!process.env.OPENROUTER_API_KEY) {
+        return res.status(500).json({ error: 'OPENROUTER_API_KEY belum disetting di Vercel' });
+    }
+
+    const hasImage = !!imageBase64;
+
+    // ── HELPER: Panggil OpenRouter ──
+    async function callOpenRouter(messages, useVision = false) {
+        const model = useVision ? MODELS.vision : MODELS.text;
+
+        const response = await fetch(OPENROUTER_BASE, {
+            method: 'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                'HTTP-Referer':  'https://pensynergy-ai.vercel.app',
+                'X-Title':       'PEN SYNERGY AI',
+            },
+            body: JSON.stringify({
+                model,
+                messages,
+                temperature: 0.7,
+                max_tokens:  2000,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+        return data.choices?.[0]?.message?.content || '';
+    }
+
+    // ================================================================
+    // MODE: NEWS SENTIMENT
+    // ================================================================
     if (mode === 'sentiment') {
         if (!newsText) return res.status(400).json({ error: 'newsText wajib diisi' });
 
-        const buildSentimentPrompt = (text) => `Analisis sentimen berita finansial ini.
-Kembalikan HANYA JSON valid (tanpa markdown):
+        const sentimentPrompt = `Kamu adalah engine analisis sentimen berita finansial.
+Baca berita berikut dan kembalikan HANYA JSON valid (tanpa markdown, tanpa penjelasan):
 {
   "impact_level": "LOW|MEDIUM|HIGH",
   "overall_sentiment": "BULLISH|BEARISH|NEUTRAL",
@@ -25,45 +74,26 @@ Kembalikan HANYA JSON valid (tanpa markdown):
   ],
   "summary": "<dampak berita 2-3 kalimat bahasa Indonesia>"
 }
-Berita: ${text}`;
+Berita: ${newsText}`;
 
         try {
-            let sentText = '';
-            const sp = buildSentimentPrompt(newsText);
-
-            if (provider === 'openai') {
-                const r = await fetch('https://api.openai.com/v1/chat/completions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-                    body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: sp }], temperature: 0, response_format: { type: 'json_object' } }),
-                });
-                const d = await r.json();
-                sentText = d.choices[0].message.content;
-
-            } else if (provider === 'gemini') {
-                const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: sp }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }),
-                });
-                const d = await r.json();
-                sentText = d.candidates[0].content.parts[0].text;
-
-            }
-            const clean = sentText.replace(/```json\n?|```\n?/g, '').trim();
+            const messages = [{ role: 'user', content: sentimentPrompt }];
+            const text = await callOpenRouter(messages, false);
+            const clean = text.replace(/```json\n?|```\n?/g, '').trim();
             return res.status(200).json(JSON.parse(clean));
-
         } catch (err) {
             return res.status(500).json({ error: 'Sentiment analysis gagal: ' + err.message });
         }
     }
 
-    // --- PROMPT TRADING EXPERT ---
+    // ================================================================
+    // MODE: TRADING ANALYSIS (default)
+    // ================================================================
     const systemPrompt = `You are an elite institutional trading analyst specializing in Smart Money Concepts (SMC), ICT methodology, and technical analysis. You have 20+ years of experience reading institutional order flow, liquidity sweeps, supply/demand zones, and market structure.
 
-Your task: Analyze the market and return ONLY a valid JSON object (no markdown, no explanation outside JSON).
+Your task: Analyze the market and return ONLY a valid JSON object. No markdown, no explanation outside JSON.
 
-JSON structure required:
+Required JSON structure:
 {
   "signal": "BUY|STRONG_BUY|SELL|STRONG_SELL|WAIT",
   "confidence": 85,
@@ -76,14 +106,14 @@ JSON structure required:
   "take_profit_1": "<price>",
   "take_profit_2": "<price>",
   "indicators": {
-    "rsi": { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
-    "macd": { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
-    "ema": { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
-    "sma": { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
-    "bb": { "value": "UPPER|MID|LOWER", "signal": "BULL|BEAR|NEUT" },
+    "rsi":    { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
+    "macd":   { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
+    "ema":    { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
+    "sma":    { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
+    "bb":     { "value": "UPPER|MID|LOWER", "signal": "BULL|BEAR|NEUT" },
     "volume": { "value": "HIGH|NORMAL|LOW", "signal": "BULL|BEAR|NEUT" },
-    "vwap": { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
-    "atr": { "value": "<value>", "signal": "HIGH|NORMAL|LOW" }
+    "vwap":   { "value": "<value>", "signal": "BULL|BEAR|NEUT" },
+    "atr":    { "value": "<value>", "signal": "HIGH|NORMAL|LOW" }
   },
   "mtf": {
     "m1":  { "bias": "BULL|BEAR|NEUT", "detail": "<short detail>" },
@@ -93,90 +123,50 @@ JSON structure required:
     "h4":  { "bias": "BULL|BEAR|NEUT", "detail": "<short detail>" },
     "d1":  { "bias": "BULL|BEAR|NEUT", "detail": "<short detail>" }
   },
-  "analysis": "<detailed 150-250 word SMC analysis in Indonesian, like a professional institutional trader>",
+  "analysis": "<detailed 150-250 word SMC analysis in Indonesian>",
   "visionAnalysis": "<if image provided: detailed chart reading in Indonesian, else null>"
 }`;
 
     const now = new Date().toUTCString();
-    const hasImage = !!imageBase64;
-    const userPromptText = `Analisis pair: ${pair}\nWaktu: ${now}\n${hasImage ? 'Screenshot chart telah diberikan. Baca dengan detail: candlestick pattern, trendline, support/resistance, liquidity zone, supply/demand, breakout/breakdown, dan momentum.' : 'Berikan analisis berdasarkan kondisi market umum pair ini.'}\n\nBerikan analisis dengan gaya Smart Money Concept (SMC) — identifikasi: market structure, order blocks, fair value gaps, liquidity sweeps, dan area entry terbaik.`;
+    const userText = `Analisis pair: ${pair}
+Waktu: ${now}
+${hasImage
+    ? 'Screenshot chart diberikan. Baca detail: candlestick pattern, trendline, support/resistance, liquidity zone, supply/demand, breakout/breakdown, momentum.'
+    : 'Berikan analisis berdasarkan kondisi market umum pair ini.'
+}
+
+Gunakan gaya Smart Money Concept (SMC): market structure, order blocks, fair value gaps, liquidity sweeps, area entry terbaik.`;
 
     try {
-        let aiResultText = "";
+        let messages;
 
-        // ==========================================
-        // ROUTER 1: OPENAI (GPT-4o)
-        // ==========================================
-        if (provider === 'openai') {
-            if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY belum disetting di Vercel");
-            
-            const messages = [
+        if (hasImage) {
+            // Pakai vision model kalau ada screenshot
+            messages = [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: hasImage 
-                    ? [
-                        { type: 'text', text: userPromptText },
-                        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
-                      ]
-                    : userPromptText 
-                }
-            ];
-
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+                {
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: userText },
+                        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
+                    ],
                 },
-                body: JSON.stringify({
-                    model: 'gpt-4o',
-                    messages: messages,
-                    response_format: { type: 'json_object' },
-                    temperature: 0.7
-                })
-            });
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-            aiResultText = data.choices[0].message.content;
-        } 
-        
-        // ==========================================
-        // ROUTER 2: GEMINI (1.5 Flash / Pro)
-        // ==========================================
-        else if (provider === 'gemini') {
-            if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY belum disetting di Vercel");
-
-            const parts = [{ text: systemPrompt + '\n\n' + userPromptText }];
-            if (hasImage) {
-                parts.push({ inlineData: { mimeType: 'image/jpeg', data: imageBase64 } });
-            }
-
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts }],
-                    generationConfig: { temperature: 0.7, responseMimeType: "application/json" }
-                })
-            });
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-            aiResultText = data.candidates[0].content.parts[0].text;
-        } 
-        
-        else {
-            return res.status(400).json({ error: 'Provider AI tidak dikenali. Pilih: openai atau gemini' });
+            ];
+        } else {
+            messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userText },
+            ];
         }
 
-        // ==========================================
-        // PARSER & PENGEMBALIAN DATA KE FRONTEND
-        // ==========================================
-        const cleanJsonText = aiResultText.replace(/```json\n?|```\n?/g, '').trim();
-        const result = JSON.parse(cleanJsonText);
+        const aiText = await callOpenRouter(messages, hasImage);
+        const clean  = aiText.replace(/```json\n?|```\n?/g, '').trim();
+        const result = JSON.parse(clean);
 
         return res.status(200).json(result);
 
     } catch (error) {
-        console.error('[API Backend Error]:', error);
+        console.error('[API Error]:', error);
         return res.status(500).json({ error: error.message || 'Gagal memproses AI' });
     }
 }
