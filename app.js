@@ -5,8 +5,6 @@
 // ── CONFIG ──
 // GANTI AI DI SINI SAJA ('openai', 'gemini', atau 'claude')
 const CONFIG = {
-    // SESUDAH — pilih salah satu
-AI_PROVIDER: 'gemini',   // Gemini (gratis tier ada)
     STORAGE_BUCKET: 'screenshots',
     TICKER_INTERVAL: 4000,
 };
