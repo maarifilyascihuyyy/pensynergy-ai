@@ -5,6 +5,7 @@
 // ── CONFIG ──
 // GANTI AI DI SINI SAJA ('openai', 'gemini', atau 'claude')
 const CONFIG = {
+    // SESUDAH — pilih salah satu
     STORAGE_BUCKET: 'screenshots',
     TICKER_INTERVAL: 4000,
 };
@@ -353,7 +354,7 @@ async function runAIAnalysis() {
 
     setAnalysisButtonsState(true);
     document.getElementById('ai-section')?.classList.add('analyzing');
-    showToast('info', 'fa-microchip', `Memanggil AI (${CONFIG.AI_PROVIDER.toUpperCase()}) dari server...`);
+    showToast('info', 'fa-microchip', 'AI sedang menganalisis market...');
 
     try {
         let screenshotUrl = null;
@@ -717,7 +718,6 @@ async function callAIAPI(pair, imageBase64 = null) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            provider:    CONFIG.AI_PROVIDER.toLowerCase(),
             pair:        pair,
             imageBase64: imageBase64 || null,
         }),
@@ -800,7 +800,6 @@ async function analyzeNewsSentiment() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                provider: CONFIG.AI_PROVIDER.toLowerCase(),
                 mode:     'sentiment',
                 newsText: newsText,
             }),
