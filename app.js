@@ -5,8 +5,7 @@
 // ── CONFIG ──
 // GANTI AI DI SINI SAJA ('openai', 'gemini', atau 'claude')
 const CONFIG = {
-    // SESUDAH — pilih salah satu
-    STORAGE_BUCKET: 'screenshots',
+        STORAGE_BUCKET: 'screenshots',
     TICKER_INTERVAL: 4000,
 };
 
