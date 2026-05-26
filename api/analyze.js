@@ -11,7 +11,7 @@ const GROQ_URL        = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL      = 'llama-3.3-70b-versatile'; // cepat + pintar
 
 const OPENROUTER_URL  = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENROUTER_MODEL_VISION = 'meta-llama/llama-3.2-11b-vision-instruct:free';
+const OPENROUTER_MODEL_VISION = 'qwen/qwen2.5-vl-7b-instruct:free';  // vision gratis, tidak pakai Gemini
 
 // ── SYSTEM PROMPT ──
 const SYSTEM_PROMPT = `You are an elite institutional trading analyst specializing in Smart Money Concepts (SMC), ICT methodology, and technical analysis. 20+ years experience reading institutional order flow, liquidity sweeps, supply/demand zones, and market structure.
