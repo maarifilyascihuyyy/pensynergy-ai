@@ -26,6 +26,67 @@
 </head>
 <body>
 
+
+  <!-- ── SIDEBAR HAMBURGER ── -->
+  <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Open menu" type="button">
+    <i class="fa-solid fa-bars"></i>
+  </button>
+
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+  <aside id="sidebar" class="sidebar-panel glass-panel" aria-label="Navigation menu">
+    <div class="sidebar-head">
+      <div class="sidebar-brand">
+        <i class="fa-solid fa-hexagon-nodes" style="color:var(--cyan);"></i>
+        <span style="font-family:var(--font-display);font-size:0.8rem;font-weight:900;letter-spacing:0.1em;">
+          <span class="logo-pen">PEN</span>
+          <span class="logo-synergy">SYNERGY</span>
+          <span class="logo-ai">AI</span>
+        </span>
+      </div>
+      <button class="sidebar-close-btn" onclick="closeSidebar()" type="button" aria-label="Close menu">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-section-label">TRADING TOOLS</div>
+      <a href="#" class="sidebar-item active" data-target="menu-chart" onclick="switchSection('menu-chart', this)">
+        <i class="fa-solid fa-chart-candlestick"></i>
+        <span>Live Chart & Analysis</span>
+      </a>
+      <a href="#" class="sidebar-item" data-target="menu-scanner" onclick="switchSection('menu-scanner', this)">
+        <i class="fa-solid fa-camera-viewfinder"></i>
+        <span>Screenshot Analyzer</span>
+      </a>
+      <a href="#" class="sidebar-item" data-target="menu-signals" onclick="switchSection('menu-signals', this)">
+        <i class="fa-solid fa-brain-circuit"></i>
+        <span>AI Signal Engine</span>
+      </a>
+
+      <div class="sidebar-section-label">TOOLS</div>
+      <a href="#" class="sidebar-item" data-target="menu-calculator" onclick="switchSection('menu-calculator', this)">
+        <i class="fa-solid fa-calculator"></i>
+        <span>Lot Size Calculator</span>
+      </a>
+      <a href="#" class="sidebar-item" data-target="menu-news" onclick="switchSection('menu-news', this)">
+        <i class="fa-solid fa-newspaper"></i>
+        <span>News Sentiment</span>
+      </a>
+
+      <div class="sidebar-section-label">ACCOUNT</div>
+      <a href="#" class="sidebar-item" data-target="menu-history" onclick="switchSection('menu-history', this)">
+        <i class="fa-solid fa-database"></i>
+        <span>Analysis History</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer-status">
+      <span class="status-dot pulse" style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;"></span>
+      <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--green);letter-spacing:0.1em;">SYSTEM ONLINE</span>
+    </div>
+  </aside>
+
   <!-- ── TOAST CONTAINER ── -->
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
@@ -219,6 +280,11 @@
       </button>
     </nav>
 
+    <!-- ── CONTENT SECTIONS WRAPPER ── -->
+    <div class="content-sections-wrap">
+
+    <!-- SECTION: CHART + METRICS + SIGNALS (default aktif) -->
+    <div id="menu-chart" class="content-section active">
     <!-- ── MAIN DASHBOARD GRID (3 COLUMNS) ── -->
     <main class="dashboard-grid">
 
@@ -499,12 +565,75 @@
     </footer>
 
   </div><!-- /#workspace -->
-  <!-- ================================================================
-     TAMBAHAN PANEL HTML — Tambahkan ke index.html
-     ================================================================ -->
 
-<!-- ── RISK / LOT CALCULATOR ──
-     Letakkan di dalam <section class="col-left"> setelah panel history -->
+    </main></div><!-- /menu-chart content-section -->
+
+    <!-- SECTION: SCREENSHOT ANALYZER -->
+    <div id="menu-scanner" class="content-section">
+      <main class="dashboard-grid-single">
+        <section class="col-center" style="max-width:700px;margin:0 auto;width:100%;">
+          <!-- SCREENSHOT UPLOAD (dipindah ke sini) -->
+          <div class="panel glass-panel" id="screenshot-section-2">
+            <div class="panel-header">
+              <div class="panel-title">
+                <i class="fa-solid fa-camera-viewfinder"></i>
+                <span>CHART SCREENSHOT ANALYZER</span>
+              </div>
+              <div id="upload-status-2" class="upload-status-badge hidden">
+                <i class="fa-solid fa-circle-check"></i> READY
+              </div>
+            </div>
+            <div class="dropzone" id="dropzone-2"
+              onclick="document.getElementById('file-input-2').click()"
+              ondragover="handleDragOver(event)"
+              ondragleave="handleDragLeave(event)"
+              ondrop="handleDrop(event)">
+              <input type="file" id="file-input-2" accept="image/*" hidden onchange="handleFileSelect(event)" />
+              <div class="dropzone-inner" id="dropzone-placeholder-2">
+                <div class="dropzone-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                <div class="dropzone-title">UPLOAD CHART SCREENSHOT</div>
+                <p class="dropzone-sub">Drag & drop atau klik untuk pilih file</p>
+                <span class="dropzone-formats">PNG · JPG · WEBP · max 10MB</span>
+              </div>
+              <div class="dropzone-preview hidden" id="dropzone-preview-2">
+                <img id="preview-img-2" src="" alt="Chart preview" />
+                <div class="preview-overlay">
+                  <button class="preview-clear-btn" onclick="clearUploadedImage(event)" type="button">
+                    <i class="fa-solid fa-trash"></i> HAPUS
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="screenshot-action-bar">
+              <button class="btn-analyze full-width" onclick="runAIAnalysis()" type="button">
+                <i class="fa-solid fa-microchip"></i> ANALYZE WITH AI
+              </button>
+            </div>
+            <div class="vision-result hidden" id="vision-result-2">
+              <div class="vision-result-header"><i class="fa-solid fa-brain-circuit"></i> SCREENSHOT ANALYSIS RESULT</div>
+              <div class="vision-result-body" id="vision-result-body-2"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div><!-- /menu-scanner -->
+
+    <!-- SECTION: AI SIGNALS + MTF + INDICATORS -->
+    <div id="menu-signals" class="content-section">
+      <main class="dashboard-grid-single">
+        <section class="col-right" style="max-width:900px;margin:0 auto;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px;">
+          <!-- AI Signal, MTF, Indicators dipindah ke sini juga -->
+          <div style="grid-column:1/-1;font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted);text-align:center;padding:8px;">
+            Klik <strong style="color:var(--cyan)">RUN ANALYSIS</strong> di panel Chart untuk analisis teks, atau upload screenshot di Scanner.
+          </div>
+        </section>
+      </main>
+    </div><!-- /menu-signals -->
+
+    <!-- SECTION: LOT CALCULATOR -->
+    <div id="menu-calculator" class="content-section">
+      <main class="dashboard-grid-single">
+        <section style="max-width:500px;margin:0 auto;width:100%;padding:16px;">
 <div class="panel glass-panel" id="calculator-section" data-mobile="ai">
   <div class="panel-header">
     <div class="panel-title">
@@ -567,10 +696,14 @@
 
   </div>
 </div>
+        </section>
+      </main>
+    </div><!-- /menu-calculator -->
 
-
-<!-- ── NEWS SENTIMENT ANALYZER ──
-     Letakkan di dalam <section class="col-right"> paling bawah -->
+    <!-- SECTION: NEWS SENTIMENT -->
+    <div id="menu-news" class="content-section">
+      <main class="dashboard-grid-single">
+        <section style="max-width:600px;margin:0 auto;width:100%;padding:16px;">
 <div class="panel glass-panel" id="news-section" data-mobile="ai">
   <div class="panel-header">
     <div class="panel-title">
@@ -597,6 +730,31 @@
     </div>
   </div>
 </div>
+
+        </section>
+      </main>
+    </div><!-- /menu-news -->
+
+    <!-- SECTION: HISTORY -->
+    <div id="menu-history" class="content-section">
+      <main class="dashboard-grid-single">
+        <section style="max-width:600px;margin:0 auto;width:100%;padding:16px;">
+          <div class="panel glass-panel">
+            <div class="panel-header">
+              <div class="panel-title"><i class="fa-solid fa-database"></i><span>ANALYSIS HISTORY</span></div>
+              <button class="btn-refresh" onclick="loadAnalysisHistory()" type="button">
+                <i class="fa-solid fa-rotate-right"></i> REFRESH
+              </button>
+            </div>
+            <div class="history-list" id="history-list-sidebar">
+              <div class="history-empty"><i class="fa-solid fa-inbox"></i><p>No analysis records yet.</p></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div><!-- /menu-history -->
+
+    </div><!-- /content-sections-wrap -->
 
   <!-- Script loading order: supabase → app → auth -->
   <script src="supabase.js"></script>
