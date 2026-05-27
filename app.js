@@ -869,6 +869,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Init risk calculator
     initRiskCalculator();
 
+    // Init sidebar
+    initSidebar();
+
     // Setup auth listener (dari auth.js, butuh supabaseClient dari supabase.js)
     if (typeof setupAuthListener === 'function') {
         setupAuthListener();
@@ -893,3 +896,79 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 5000);
 });
+
+
+// ================================================================
+// SIDEBAR HAMBURGER MENU
+// ================================================================
+
+function openSidebar() {
+    document.getElementById('sidebar')?.classList.add('open');
+    document.getElementById('sidebar-overlay')?.classList.add('show');
+}
+
+function closeSidebar() {
+    document.getElementById('sidebar')?.classList.remove('open');
+    document.getElementById('sidebar-overlay')?.classList.remove('show');
+}
+
+function switchSection(targetId, clickedItem) {
+    // Sembunyikan semua section
+    document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+
+    // Tampilkan section yang dipilih
+    const target = document.getElementById(targetId);
+    if (target) target.classList.add('active');
+
+    // Update active state sidebar item
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    if (clickedItem) clickedItem.classList.add('active');
+
+    // Tutup sidebar setelah pilih
+    closeSidebar();
+
+    // Kalau ke history, load ulang
+    if (targetId === 'menu-history') loadHistorySidebar();
+}
+
+// Load history ke sidebar panel
+async function loadHistorySidebar() {
+    const listEl = document.getElementById('history-list-sidebar');
+    if (!listEl || !supabaseClient || !currentUser) return;
+
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted);">Loading...</div>';
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('analysis_history')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            listEl.innerHTML = '<div class="history-empty"><i class="fa-solid fa-inbox"></i><p>No analysis records yet.</p></div>';
+            return;
+        }
+
+        listEl.innerHTML = data.map(item => renderHistoryItem(item)).join('');
+    } catch (err) {
+        listEl.innerHTML = '<div class="history-empty"><i class="fa-solid fa-triangle-exclamation" style="color:var(--yellow)"></i><p>Gagal memuat history.</p></div>';
+    }
+}
+
+// Init sidebar toggle button
+function initSidebar() {
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const overlay   = document.getElementById('sidebar-overlay');
+
+    if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+    if (overlay)   overlay.addEventListener('click', closeSidebar);
+
+    // Keyboard: ESC tutup sidebar
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeSidebar();
+    });
+}
