@@ -71,7 +71,7 @@ async function fetchAPI(url, apiKey, modelName, messages, extraHeaders = {}) {
             'Authorization': `Bearer ${apiKey}`,
             ...extraHeaders,
         },
-        body: JSON.stringify({ model: modelName, messages, temperature: 0.7, max_tokens: 2000 }),
+        body: JSON.stringify({ model: modelName, messages, temperature: 0.7, max_tokens: 2000, response_format: { type: 'json_object' } }),
     });
 
     const data = await res.json();
@@ -157,7 +157,7 @@ function parseJSON(text) {
 
     // 5. Kalau semua gagal, tampilkan 200 char pertama buat debug
     const preview = clean.substring(0, 200).replace(/\n/g, ' ');
-    throw new Error(`AI tidak mengembalikan JSON valid. AI malah balas: "${preview}..."`);
+    throw new Error(`[KODE BARU AKTIF!] AI tidak mengembalikan JSON valid. AI malah balas: "${preview}..."`);
 }
 
 // ================================================================
@@ -220,6 +220,6 @@ Gunakan SMC: market structure, order blocks, fair value gaps, liquidity sweeps, 
 
     } catch (error) {
         console.error('[API Error]:', error.message);
-        return res.status(500).json({ error: error.message || 'Gagal memproses AI' });
+        return res.status(500).json({ error: '[KODE BARU AKTIF!] ' + (error.message || 'Gagal memproses AI') });
     }
 }
