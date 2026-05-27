@@ -115,8 +115,9 @@ async function processTextWithFallback(messages) {
 // Jalur Vision: OpenRouter (loop) → Groq Vision
 async function processVisionWithFallback(messages) {
     const orModels = [
+        'google/gemini-2.5-flash:free',
+        'google/gemini-2.5-pro:free',
         'qwen/qwen2.5-vl-7b-instruct:free',
-        'meta-llama/llama-3.2-11b-vision-instruct:free',
     ];
 
     let lastError = null;
@@ -134,7 +135,7 @@ async function processVisionWithFallback(messages) {
     // Fallback terakhir: Groq Vision
     console.warn('[Fallback Vision] Semua OpenRouter gagal. Beralih ke Groq Vision...');
     try {
-        return await fetchGroq(messages, 'llama-3.2-90b-vision-preview');
+        return await fetchGroq(messages, 'llama-3.2-11b-vision-preview');
     } catch (errGroq) {
         throw new Error(`Semua server vision down. OpenRouter: ${lastError?.message} | Groq: ${errGroq.message}`);
     }
