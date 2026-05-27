@@ -1,9 +1,10 @@
 // /api/analyze.js
 export const maxDuration = 60;
 
-// ── CONFIG ENDPOINTS ──
+// ── CONFIG ENDPOINTS (3 PROVIDER) ──
 const GROQ_URL       = 'https://api.groq.com/openai/v1/chat/completions';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const GEMINI_URL     = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
 // ── SYSTEM PROMPT ──
 const SYSTEM_PROMPT = `You are an elite institutional trading analyst specializing in Smart Money Concepts (SMC), ICT methodology, and technical analysis. Return ONLY a valid JSON object. No markdown, no text outside JSON.
@@ -41,7 +42,7 @@ Required structure:
   "visionAnalysis": "<detailed chart reading in Indonesian or null>"
 }`;
 
-// ── SENTIMENT PROMPT (lengkap dengan format JSON) ──
+// ── SENTIMENT PROMPT ──
 const SENTIMENT_PROMPT = (newsText) => `Kamu adalah engine analisis sentimen berita finansial.
 Kembalikan HANYA JSON valid (tanpa markdown, tanpa penjelasan):
 {
@@ -58,88 +59,77 @@ Kembalikan HANYA JSON valid (tanpa markdown, tanpa penjelasan):
 Berita: ${newsText}`;
 
 // ================================================================
-// CORE FETCHERS
+// CORE FETCHER — 1 fungsi untuk semua provider
 // ================================================================
+async function fetchAPI(url, apiKey, modelName, messages, extraHeaders = {}) {
+    if (!apiKey) throw new Error('API Key belum disetting di Vercel');
 
-async function fetchGroq(messages, modelName) {
-    if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY belum disetting di Vercel');
-    const res = await fetch(GROQ_URL, {
+    const res = await fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type':  'application/json',
-            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+            'Authorization': `Bearer ${apiKey}`,
+            ...extraHeaders,
         },
         body: JSON.stringify({ model: modelName, messages, temperature: 0.7, max_tokens: 2000 }),
     });
+
     const data = await res.json();
-    if (data.error) throw new Error(`Groq [${modelName}]: ${data.error.message || JSON.stringify(data.error)}`);
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     return data.choices?.[0]?.message?.content || '';
 }
 
-async function fetchOpenRouter(messages, modelName) {
-    if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY belum disetting di Vercel');
-    const res = await fetch(OPENROUTER_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type':  'application/json',
-            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            'HTTP-Referer':  'https://pensynergy-ai.vercel.app',
-            'X-Title':       'PEN SYNERGY AI',
-        },
-        body: JSON.stringify({ model: modelName, messages, temperature: 0.7, max_tokens: 2000 }),
+// Wrapper per provider
+const askGroq = (msgs, model) =>
+    fetchAPI(GROQ_URL, process.env.GROQ_API_KEY, model, msgs);
+
+const askGemini = (msgs, model) =>
+    fetchAPI(GEMINI_URL, process.env.GEMINI_API_KEY, model, msgs);
+
+const askOpenRouter = (msgs, model) =>
+    fetchAPI(OPENROUTER_URL, process.env.OPENROUTER_API_KEY, model, msgs, {
+        'HTTP-Referer': 'https://pensynergy-ai.vercel.app',
+        'X-Title':      'PEN SYNERGY AI',
     });
-    const data = await res.json();
-    if (data.error) throw new Error(`OpenRouter [${modelName}]: ${data.error.message || JSON.stringify(data.error)}`);
-    return data.choices?.[0]?.message?.content || '';
-}
 
 // ================================================================
-// CROSS-FALLBACK LOGIC
+// SMART ROUTING — loop semua route, fallback otomatis
 // ================================================================
+async function executeWithFallback(messages, routeList, mode) {
+    const errors = [];
 
-// Jalur Teks: Groq → OpenRouter
-async function processTextWithFallback(messages) {
-    try {
-        console.log('[Teks] Mencoba Groq (llama-3.3-70b-versatile)...');
-        return await fetchGroq(messages, 'llama-3.3-70b-versatile');
-    } catch (errGroq) {
-        console.warn(`[Fallback Teks] Groq gagal: ${errGroq.message}. Beralih ke OpenRouter...`);
+    for (const route of routeList) {
         try {
-            return await fetchOpenRouter(messages, 'meta-llama/llama-3.3-70b-instruct:free');
-        } catch (errOR) {
-            throw new Error(`Semua server teks down. Groq: ${errGroq.message} | OpenRouter: ${errOR.message}`);
-        }
-    }
-}
-
-// Jalur Vision: OpenRouter (loop) → Groq Vision
-async function processVisionWithFallback(messages) {
-    const orModels = [
-        'google/gemini-2.5-flash:free',
-        'google/gemini-2.5-pro:free',
-        'qwen/qwen2.5-vl-7b-instruct:free',
-    ];
-
-    let lastError = null;
-
-    for (const model of orModels) {
-        try {
-            console.log(`[Vision] Mencoba OpenRouter (${model})...`);
-            return await fetchOpenRouter(messages, model);
+            console.log(`[${mode}] Mencoba ${route.provider} — ${route.model}`);
+            if (route.provider === 'Groq')       return await askGroq(messages, route.model);
+            if (route.provider === 'Gemini')     return await askGemini(messages, route.model);
+            if (route.provider === 'OpenRouter') return await askOpenRouter(messages, route.model);
         } catch (err) {
-            console.warn(`[Vision] ${model} gagal: ${err.message}`);
-            lastError = err;
+            console.warn(`[${route.provider} GAGAL] ${err.message}`);
+            errors.push(`${route.provider}(${route.model}): ${err.message}`);
         }
     }
 
-    // Fallback terakhir: Groq Vision
-    console.warn('[Fallback Vision] Semua OpenRouter gagal. Beralih ke Groq Vision...');
-    try {
-        return await fetchGroq(messages, 'llama-3.2-11b-vision-preview');
-    } catch (errGroq) {
-        throw new Error(`Semua server vision down. OpenRouter: ${lastError?.message} | Groq: ${errGroq.message}`);
-    }
+    throw new Error(`Semua server ${mode} down! [${errors.join(' | ')}]`);
 }
+
+// ================================================================
+// ROUTE DEFINITIONS
+// ================================================================
+
+// Teks: Groq (cepat) → Gemini (stabil) → OpenRouter (cadangan)
+const TEXT_ROUTES = [
+    { provider: 'Groq',       model: 'llama-3.3-70b-versatile' },
+    { provider: 'Gemini',     model: 'gemini-2.5-flash' },
+    { provider: 'OpenRouter', model: 'meta-llama/llama-3.3-70b-instruct:free' },
+];
+
+// Vision: Gemini (terbaik) → Groq (cepat) → OpenRouter (cadangan)
+const VISION_ROUTES = [
+    { provider: 'Gemini',     model: 'gemini-2.5-flash' },
+    { provider: 'Groq',       model: 'llama-3.2-11b-vision-preview' },
+    { provider: 'OpenRouter', model: 'qwen/qwen2.5-vl-7b-instruct:free' },
+];
 
 // ================================================================
 // PARSER
@@ -165,7 +155,11 @@ export default async function handler(req, res) {
     if (mode === 'sentiment') {
         if (!newsText) return res.status(400).json({ error: 'newsText wajib diisi' });
         try {
-            const text = await processTextWithFallback([{ role: 'user', content: SENTIMENT_PROMPT(newsText) }]);
+            const text = await executeWithFallback(
+                [{ role: 'user', content: SENTIMENT_PROMPT(newsText) }],
+                TEXT_ROUTES,
+                'Sentiment'
+            );
             return res.status(200).json(parseJSON(text));
         } catch (err) {
             return res.status(500).json({ error: 'Sentiment gagal: ' + err.message });
@@ -195,13 +189,13 @@ Gunakan SMC: market structure, order blocks, fair value gaps, liquidity sweeps, 
                     ],
                 },
             ];
-            aiText = await processVisionWithFallback(messages);
+            aiText = await executeWithFallback(messages, VISION_ROUTES, 'Vision');
         } else {
             const messages = [
                 { role: 'system', content: SYSTEM_PROMPT },
                 { role: 'user',   content: userText },
             ];
-            aiText = await processTextWithFallback(messages);
+            aiText = await executeWithFallback(messages, TEXT_ROUTES, 'Teks');
         }
 
         return res.status(200).json(parseJSON(aiText));
