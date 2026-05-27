@@ -132,14 +132,32 @@ const VISION_ROUTES = [
 ];
 
 // ================================================================
-// PARSER
+// PARSER (TAHAN BANTING)
 // ================================================================
 function parseJSON(text) {
-    const clean = text.replace(/```json\n?|```\n?/g, '').trim();
+    if (!text) throw new Error('AI mengembalikan respons kosong');
+
+    // 1. Bersihkan markdown fences
+    let clean = text.replace(/```json\n?|```\n?/g, '').trim();
+
+    // 2. Coba parse langsung
     try { return JSON.parse(clean); } catch (_) {}
+
+    // 3. Ekstrak JSON object dari teks (AI sering nambah kalimat di luar JSON)
     const match = clean.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error('AI tidak mengembalikan JSON valid');
+    if (match) {
+        try { return JSON.parse(match[0]); } catch (_) {}
+    }
+
+    // 4. Coba ekstrak JSON array juga (edge case)
+    const arrMatch = clean.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+        try { return JSON.parse(arrMatch[0]); } catch (_) {}
+    }
+
+    // 5. Kalau semua gagal, tampilkan 200 char pertama buat debug
+    const preview = clean.substring(0, 200).replace(/\n/g, ' ');
+    throw new Error(`AI tidak mengembalikan JSON valid. AI malah balas: "${preview}..."`);
 }
 
 // ================================================================
