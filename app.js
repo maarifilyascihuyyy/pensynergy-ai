@@ -869,6 +869,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Init risk calculator
     initRiskCalculator();
 
+    // Init sidebar & chat
+    initSidebar();
+    initChatUI();
+
     // Init sidebar
     initSidebar();
 
@@ -971,4 +975,334 @@ function initSidebar() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeSidebar();
     });
+}
+
+
+// ================================================================
+// SIDEBAR & SPA NAVIGATION
+// ================================================================
+
+function openSidebar() {
+    document.getElementById('sidebar')?.classList.add('open');
+    document.getElementById('sidebar-overlay')?.classList.add('show');
+}
+
+function closeSidebar() {
+    document.getElementById('sidebar')?.classList.remove('open');
+    document.getElementById('sidebar-overlay')?.classList.remove('show');
+}
+
+function switchSection(targetId, clickedItem) {
+    document.querySelectorAll('.spa-section').forEach(s => s.classList.remove('active'));
+    document.getElementById(targetId)?.classList.add('active');
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    if (clickedItem) clickedItem.classList.add('active');
+    closeSidebar();
+    if (targetId === 'sec-history') loadAnalysisHistory();
+    if (targetId === 'sec-metrics') initTicker();
+}
+
+function initSidebar() {
+    document.getElementById('sidebar-toggle')?.addEventListener('click', openSidebar);
+    document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+}
+
+// ================================================================
+// CHAT UI
+// ================================================================
+
+let chatImageB64  = null;
+let chatImageFile = null;
+let isChatSending = false;
+
+function handleChatImageSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        showToast('error', 'fa-circle-xmark', 'File harus gambar!');
+        return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+        showToast('error', 'fa-circle-xmark', 'Max 10MB!');
+        return;
+    }
+
+    chatImageFile = file;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        chatImageB64 = ev.target.result.split(',')[1];
+
+        const wrap = document.getElementById('chat-preview-wrap');
+        const img  = document.getElementById('chat-preview-img');
+        const btn  = document.querySelector('.chat-upload-btn');
+
+        if (img)  img.src = ev.target.result;
+        if (wrap) wrap.classList.remove('hidden');
+        if (btn)  btn.classList.add('has-image');
+
+        showToast('success', 'fa-circle-check', 'Screenshot siap: ' + file.name);
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeChatImage() {
+    chatImageB64  = null;
+    chatImageFile = null;
+
+    const wrap     = document.getElementById('chat-preview-wrap');
+    const img      = document.getElementById('chat-preview-img');
+    const fileInput = document.getElementById('chat-image-input');
+    const btn      = document.querySelector('.chat-upload-btn');
+
+    if (img)      img.src = '';
+    if (wrap)     wrap.classList.add('hidden');
+    if (fileInput) fileInput.value = '';
+    if (btn)      btn.classList.remove('has-image');
+}
+
+// Append bubble ke chat
+function appendBubble(type, html) {
+    const area   = document.getElementById('chat-messages');
+    if (!area) return null;
+
+    const bubble = document.createElement('div');
+    bubble.className = type === 'user' ? 'chat-bubble bubble-user' : 'chat-bubble bubble-ai';
+    bubble.innerHTML = html;
+    area.appendChild(bubble);
+    area.scrollTop = area.scrollHeight;
+    return bubble;
+}
+
+// Loading bubble (3 titik)
+function appendLoadingBubble() {
+    const area = document.getElementById('chat-messages');
+    if (!area) return null;
+
+    const el = document.createElement('div');
+    el.className = 'bubble-loading';
+    el.id = 'chat-loading-bubble';
+    el.innerHTML = '<span></span><span></span><span></span>';
+    area.appendChild(el);
+    area.scrollTop = area.scrollHeight;
+    return el;
+}
+
+function removeLoadingBubble() {
+    document.getElementById('chat-loading-bubble')?.remove();
+}
+
+// Format hasil AI jadi HTML premium
+function formatAIResultToHTML(data) {
+    const signalMap = {
+        'STRONG_BUY':  { cls: 'strong-buy', icon: 'fa-rocket',          label: 'STRONG BUY' },
+        'BUY':         { cls: 'buy',         icon: 'fa-arrow-trend-up',  label: 'BUY' },
+        'WAIT':        { cls: 'wait',         icon: 'fa-hourglass-half', label: 'WAIT' },
+        'SELL':        { cls: 'sell',         icon: 'fa-arrow-trend-down', label: 'SELL' },
+        'STRONG_SELL': { cls: 'strong-sell', icon: 'fa-skull-crossbones', label: 'STRONG SELL' },
+    };
+
+    const sig = signalMap[data.signal?.toUpperCase()] || signalMap['WAIT'];
+    const conf = parseInt(data.confidence) || 0;
+
+    const dirColor = { BULLISH: 'var(--green)', BEARISH: 'var(--red)', SIDEWAYS: 'var(--yellow)' }[data.direction] || 'var(--text-primary)';
+    const riskColor = { LOW: 'var(--green)', MEDIUM: 'var(--yellow)', HIGH: 'var(--red)' }[data.risk_level] || 'var(--text-primary)';
+
+    return `
+        <div class="bubble-avatar"><i class="fa-solid fa-brain-circuit"></i> PEN SYNERGY AI</div>
+
+        <div class="ai-signal-badge-chat ${sig.cls}">
+            <i class="fa-solid ${sig.icon}"></i> ${sig.label}
+        </div>
+
+        <!-- Confidence bar -->
+        <div style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--text-muted);margin-bottom:4px;">
+                <span>CONFIDENCE</span><span style="color:var(--cyan);">${conf}%</span>
+            </div>
+            <div style="height:5px;background:rgba(0,0,0,0.4);border-radius:99px;overflow:hidden;">
+                <div style="height:100%;width:${conf}%;background:linear-gradient(90deg,var(--blue),var(--cyan));border-radius:99px;box-shadow:0 0 6px var(--cyan);"></div>
+            </div>
+        </div>
+
+        <!-- Stats grid -->
+        <div class="ai-result-grid">
+            <div class="ai-result-card">
+                <div class="ai-result-label">DIRECTION</div>
+                <div class="ai-result-value" style="color:${dirColor};">${data.direction || '—'}</div>
+            </div>
+            <div class="ai-result-card">
+                <div class="ai-result-label">RISK LEVEL</div>
+                <div class="ai-result-value" style="color:${riskColor};">${data.risk_level || '—'}</div>
+            </div>
+            <div class="ai-result-card">
+                <div class="ai-result-label">MOMENTUM</div>
+                <div class="ai-result-value">${data.momentum || '—'}</div>
+            </div>
+            <div class="ai-result-card">
+                <div class="ai-result-label">TREND STR.</div>
+                <div class="ai-result-value">${data.trend_strength || '—'}</div>
+            </div>
+        </div>
+
+        <!-- Price levels -->
+        ${data.entry ? `
+        <div class="ai-result-grid" style="margin-top:0;">
+            <div class="ai-result-card" style="border-color:rgba(0,242,254,0.3);">
+                <div class="ai-result-label">ENTRY</div>
+                <div class="ai-result-value" style="color:var(--cyan);">${escapeHtml(data.entry)}</div>
+            </div>
+            <div class="ai-result-card" style="border-color:rgba(239,68,68,0.3);">
+                <div class="ai-result-label">STOP LOSS</div>
+                <div class="ai-result-value" style="color:var(--red);">${escapeHtml(data.stop_loss || '—')}</div>
+            </div>
+            <div class="ai-result-card" style="border-color:rgba(16,185,129,0.3);">
+                <div class="ai-result-label">TP 1</div>
+                <div class="ai-result-value" style="color:var(--green);">${escapeHtml(data.take_profit_1 || '—')}</div>
+            </div>
+            <div class="ai-result-card" style="border-color:rgba(16,185,129,0.2);">
+                <div class="ai-result-label">TP 2</div>
+                <div class="ai-result-value" style="color:var(--green);">${escapeHtml(data.take_profit_2 || '—')}</div>
+            </div>
+        </div>` : ''}
+
+        <!-- Analysis text -->
+        <div class="ai-analysis-text">${escapeHtml(data.analysis || '')
+            .replace(/(BULLISH|naik|uptrend|buy|breakout)/gi, '<span class="highlight-bull">$1</span>')
+            .replace(/(BEARISH|turun|downtrend|sell|breakdown)/gi, '<span class="highlight-bear">$1</span>')
+            .replace(/(liquidity|order block|fair value gap|FVG|SMC|supply|demand)/gi, '<span class="highlight-info">$1</span>')
+        }</div>
+
+        ${data.visionAnalysis ? `
+        <div style="margin-top:12px;padding:10px;background:rgba(0,242,254,0.04);border:1px solid var(--border);border-radius:8px;">
+            <div style="font-family:var(--font-display);font-size:0.55rem;color:var(--cyan);letter-spacing:0.14em;margin-bottom:6px;">
+                <i class="fa-solid fa-eye"></i> VISION ANALYSIS
+            </div>
+            <div style="font-size:0.7rem;color:var(--text-secondary);line-height:1.7;">${escapeHtml(data.visionAnalysis)}</div>
+        </div>` : ''}
+    `;
+}
+
+async function handleSendMessage() {
+    if (isChatSending) return;
+
+    const textarea  = document.getElementById('chat-textarea');
+    const textInput = textarea?.value?.trim();
+
+    if (!textInput && !chatImageB64) {
+        showToast('warning', 'fa-triangle-exclamation', 'Ketik pesan atau upload screenshot!');
+        return;
+    }
+
+    if (!currentUser) {
+        showToast('warning', 'fa-triangle-exclamation', 'Login dulu!');
+        return;
+    }
+
+    isChatSending = true;
+    const sendBtn = document.getElementById('chat-send-btn');
+    if (sendBtn) sendBtn.disabled = true;
+
+    // Get pair dari chat selector
+    const pairSel = document.getElementById('chat-pair-select');
+    if (pairSel) {
+        currentPair = pairSel.value;
+        const opt = pairSel.options[pairSel.selectedIndex];
+        currentPairLabel = opt ? opt.text : pairSel.value;
+    }
+
+    // Tampilkan bubble user
+    const userImgHtml = chatImageB64
+        ? `<img src="data:image/jpeg;base64,${chatImageB64}" class="bubble-img" alt="Chart" />`
+        : '';
+    appendBubble('user', userImgHtml + (textInput ? `<div>${escapeHtml(textInput)}</div>` : '<div><em style="color:var(--text-muted);">Screenshot uploaded</em></div>'));
+
+    // Reset input
+    if (textarea) { textarea.value = ''; textarea.style.height = 'auto'; }
+
+    // Simpan image untuk dikirim, lalu clear preview
+    const imageToSend = chatImageB64;
+    const fileToSave  = chatImageFile;
+    removeChatImage();
+
+    // Loading bubble
+    appendLoadingBubble();
+
+    try {
+        // Upload screenshot ke Supabase Storage kalau ada
+        let screenshotUrl = null;
+        if (fileToSave) {
+            screenshotUrl = await uploadScreenshotToSupabase(fileToSave);
+        }
+
+        // Panggil AI
+        const result = await callAIAPI(currentPairLabel, imageToSend);
+
+        if (!result || !result.signal) throw new Error('Format respons AI tidak valid');
+
+        removeLoadingBubble();
+
+        // Tampilkan hasil di chat bubble
+        appendBubble('ai', formatAIResultToHTML(result));
+
+        // Simpan ke Supabase
+        await saveAnalysisToSupabase(result, screenshotUrl);
+        await loadAnalysisHistory();
+
+        showToast('success', 'fa-circle-check', `Analisis ${currentPairLabel} selesai!`, 4000);
+        lastAnalysis = result;
+
+    } catch (err) {
+        removeLoadingBubble();
+        appendBubble('ai', `
+            <div class="bubble-avatar"><i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i> ERROR</div>
+            <div style="color:var(--red);font-size:0.72rem;">${escapeHtml(err.message || 'Analisis gagal')}</div>
+        `);
+        showToast('error', 'fa-circle-xmark', 'Analisis gagal: ' + (err.message || ''));
+    } finally {
+        isChatSending = false;
+        if (sendBtn) sendBtn.disabled = false;
+    }
+}
+
+function initChatUI() {
+    // Auto-resize textarea
+    const textarea = document.getElementById('chat-textarea');
+    if (textarea) {
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        // Enter kirim, Shift+Enter baris baru
+        textarea.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+    }
+
+    // Sync pair selector di chat dengan pair selector lain
+    const chatPairSel = document.getElementById('chat-pair-select');
+    if (chatPairSel) {
+        chatPairSel.addEventListener('change', function() {
+            const pairSel = document.getElementById('pair-select');
+            if (pairSel) pairSel.value = this.value;
+            changeTradingPair(this.value);
+        });
+    }
+
+    // Greeting message
+    setTimeout(() => {
+        appendBubble('ai', `
+            <div class="bubble-avatar"><i class="fa-solid fa-brain-circuit"></i> PEN SYNERGY AI</div>
+            <div>Selamat datang di <span class="highlight-info">PEN SYNERGY AI</span> Trading Terminal.</div>
+            <div style="margin-top:8px;color:var(--text-muted);font-size:0.7rem;">
+                Pilih pair di kiri, lalu klik <i class="fa-solid fa-paper-plane" style="color:var(--cyan);"></i> untuk analisis teks — 
+                atau upload screenshot chart dengan <i class="fa-solid fa-image" style="color:var(--cyan);"></i> untuk analisis visual.
+            </div>
+        `);
+    }, 300);
 }
