@@ -154,12 +154,7 @@
         <a href="#" class="sidebar-item active" data-section="sec-chat" onclick="switchSection('sec-chat',this);return false;">
           <i class="fa-solid fa-brain-circuit"></i><span>AI Analyzer</span>
         </a>
-        <a href="#" class="sidebar-item" data-section="sec-chart" onclick="switchSection('sec-chart',this);return false;">
-          <i class="fa-solid fa-chart-candlestick"></i><span>Live Chart</span>
-        </a>
-        <a href="#" class="sidebar-item" data-section="sec-metrics" onclick="switchSection('sec-metrics',this);return false;">
-          <i class="fa-solid fa-wave-square"></i><span>Market Metrics</span>
-        </a>
+
         <a href="#" class="sidebar-item" data-section="sec-calculator" onclick="switchSection('sec-calculator',this);return false;">
           <i class="fa-solid fa-calculator"></i><span>Lot Calculator</span>
         </a>
@@ -217,6 +212,50 @@
            SECTION: AI ANALYZER (Chat)
            ══════════════════════════════════ -->
       <section id="sec-chat" class="spa-section active">
+        <!-- MINI CHART + METRICS STRIP (selalu tampil di atas chat) -->
+        <div class="chat-top-strip">
+          <div class="chat-strip-chart">
+            <div class="panel glass-panel" style="height:100%;border-radius:0;border-left:none;border-right:none;border-top:none;">
+              <div class="panel-header" style="padding:10px 14px;">
+                <div class="panel-title" style="font-size:0.6rem;">
+                  <i class="fa-solid fa-chart-candlestick"></i><span>LIVE CHART</span>
+                </div>
+                <div class="pair-selector">
+                  <select id="pair-select" class="select-input" onchange="changeTradingPair(this.value)">
+                    <optgroup label="— FOREX —">
+                      <option value="FX:EURUSD" selected>EUR/USD</option>
+                      <option value="FX:GBPUSD">GBP/USD</option>
+                      <option value="FX:USDJPY">USD/JPY</option>
+                      <option value="OANDA:GOLD">XAU/USD</option>
+                    </optgroup>
+                    <optgroup label="— CRYPTO —">
+                      <option value="BINANCE:BTCUSDT">BTC/USDT</option>
+                      <option value="BINANCE:ETHUSDT">ETH/USDT</option>
+                    </optgroup>
+                    <optgroup label="— STOCKS —">
+                      <option value="NASDAQ:AAPL">AAPL</option>
+                      <option value="NASDAQ:TSLA">TSLA</option>
+                    </optgroup>
+                  </select>
+                </div>
+              </div>
+              <div class="tradingview-wrapper" id="tradingview-container" style="height:280px;"></div>
+            </div>
+          </div>
+
+          <div class="chat-strip-metrics">
+            <div class="panel glass-panel" style="height:100%;border-radius:0;border:none;border-bottom:1px solid var(--border);">
+              <div class="panel-header" style="padding:8px 14px;">
+                <div class="panel-title" style="font-size:0.6rem;">
+                  <i class="fa-solid fa-wave-square"></i><span>LIVE METRICS</span>
+                </div>
+                <div class="live-badge"><span class="blink-dot"></span> LIVE</div>
+              </div>
+              <div class="ticker-grid" id="ticker-grid" style="grid-template-columns:repeat(6,1fr);"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="chat-wrapper">
           <!-- Messages area -->
           <div id="chat-messages" class="chat-messages"></div>
@@ -277,11 +316,12 @@
               Upload screenshot chart untuk analisis visual, atau langsung klik kirim untuk analisis teks.
             </p>
           </div>
-        </div>
+        </div><!-- /chat-wrapper -->
+        </div><!-- /chat-top-strip wrapper -->
       </section>
 
       <!-- ══════════════════════════════════
-           SECTION: LIVE CHART
+           SECTION: LIVE CHART (hidden, tetap ada untuk compatibility)
            ══════════════════════════════════ -->
       <section id="sec-chart" class="spa-section">
         <div class="spa-inner">
