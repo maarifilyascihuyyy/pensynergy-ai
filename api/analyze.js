@@ -141,23 +141,31 @@ function parseJSON(text) {
     let clean = text.replace(/```json\n?|```\n?/g, '').trim();
 
     // 2. Coba parse langsung
-    try { return JSON.parse(clean); } catch (_) {}
+    try {
+        const parsed = JSON.parse(clean);
+        // AI kadang return array berisi 1 object — ambil element pertama
+        if (Array.isArray(parsed)) return parsed[0];
+        return parsed;
+    } catch (_) {}
 
-    // 3. Ekstrak JSON object dari teks (AI sering nambah kalimat di luar JSON)
-    const match = clean.match(/\{[\s\S]*\}/);
-    if (match) {
-        try { return JSON.parse(match[0]); } catch (_) {}
+    // 3. Ekstrak JSON object dari teks
+    const objMatch = clean.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+        try { return JSON.parse(objMatch[0]); } catch (_) {}
     }
 
-    // 4. Coba ekstrak JSON array juga (edge case)
+    // 4. Ekstrak JSON array — ambil element pertama
     const arrMatch = clean.match(/\[[\s\S]*\]/);
     if (arrMatch) {
-        try { return JSON.parse(arrMatch[0]); } catch (_) {}
+        try {
+            const arr = JSON.parse(arrMatch[0]);
+            if (Array.isArray(arr) && arr.length > 0) return arr[0];
+        } catch (_) {}
     }
 
-    // 5. Kalau semua gagal, tampilkan 200 char pertama buat debug
+    // 5. Gagal total — tampilkan preview untuk debug
     const preview = clean.substring(0, 200).replace(/\n/g, ' ');
-    throw new Error(`[KODE BARU AKTIF!] AI tidak mengembalikan JSON valid. AI malah balas: "${preview}..."`);
+    throw new Error(`AI tidak mengembalikan JSON valid. Respons: "${preview}..."`);
 }
 
 // ================================================================
@@ -220,6 +228,6 @@ Gunakan SMC: market structure, order blocks, fair value gaps, liquidity sweeps, 
 
     } catch (error) {
         console.error('[API Error]:', error.message);
-        return res.status(500).json({ error: '[KODE BARU AKTIF!] ' + (error.message || 'Gagal memproses AI') });
+        return res.status(500).json({ error: error.message || 'Gagal memproses AI' });
     }
 }
