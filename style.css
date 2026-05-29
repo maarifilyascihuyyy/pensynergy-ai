@@ -1656,3 +1656,53 @@ body::after {
   .ai-result-grid { grid-template-columns: 1fr; }
   .spa-inner { padding: 10px; }
 }
+
+/* ── CHAT TOP STRIP: Chart + Metrics ── */
+.chat-top-strip {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-strip-chart {
+  flex-shrink: 0;
+}
+
+.chat-strip-chart .tradingview-wrapper {
+  height: 280px !important;
+}
+
+.chat-strip-metrics {
+  flex-shrink: 0;
+  max-height: 90px;
+  overflow: hidden;
+}
+
+.chat-strip-metrics .ticker-grid {
+  grid-template-columns: repeat(6, 1fr) !important;
+}
+
+.chat-strip-metrics .ticker-card {
+  padding: 10px 12px;
+}
+
+.chat-strip-metrics .tick-value {
+  font-size: 0.85rem;
+}
+
+/* Adjust chat-wrapper setelah strip */
+#sec-chat {
+  overflow: hidden;
+}
+
+#sec-chat .chat-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 700px) {
+  .chat-strip-chart .tradingview-wrapper { height: 200px !important; }
+  .chat-strip-metrics .ticker-grid { grid-template-columns: repeat(3, 1fr) !important; }
+  .chat-strip-metrics { max-height: 120px; }
+}
